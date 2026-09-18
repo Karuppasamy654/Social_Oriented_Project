@@ -1,0 +1,22 @@
+{
+  "name": "codebuddy-root",
+  "version": "1.0.0",
+  "description": "CodeBuddy Full-Stack Monorepo Root",
+  "private": true,
+  "scripts": {
+    "start": "npm --prefix server start",
+    "dev": "npm --prefix server start",
+    "select:leetcode500": "npm --prefix server run select:leetcode500",
+    "validate:leetcode500": "npm --prefix server run validate:leetcode500",
+    "import:leetcode500": "npm --prefix server run import:leetcode500",
+    "company:download": "python data/scripts/download_company_dataset.py",
+    "company:normalize": "python data/scripts/normalize_company_dataset.py",
+    "company:select": "python data/scripts/select_company_problems.py",
+    "company:validate": "python data/scripts/validate_company_dataset.py",
+    "company:import": "npm --prefix server run company:import",
+    "test": "npm --prefix server test",
+    "build": "npm --prefix client run build",
+    "dev:server": "npm --prefix server start",
+    "dev:client": "npm --prefix client run dev"
+  }
+}

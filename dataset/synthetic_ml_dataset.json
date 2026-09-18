@@ -1,0 +1,8 @@
+[
+  { "accuracy": 95, "avgTimeMin": 8, "problemsSolved": 45, "easyRate": 1.0, "medRate": 0.9, "hardRate": 0.8, "hintsUsed": 1, "selfLevel": "Intermediate", "label": "Advanced" },
+  { "accuracy": 60, "avgTimeMin": 25, "problemsSolved": 8, "easyRate": 0.6, "medRate": 0.2, "hardRate": 0.0, "hintsUsed": 6, "selfLevel": "Intermediate", "label": "Beginner+" },
+  { "accuracy": 40, "avgTimeMin": 30, "problemsSolved": 3, "easyRate": 0.4, "medRate": 0.0, "hardRate": 0.0, "hintsUsed": 8, "selfLevel": "Beginner", "label": "Beginner" },
+  { "accuracy": 82, "avgTimeMin": 14, "problemsSolved": 25, "easyRate": 0.9, "medRate": 0.75, "hardRate": 0.3, "hintsUsed": 3, "selfLevel": "Intermediate", "label": "Intermediate+" },
+  { "accuracy": 92, "avgTimeMin": 10, "problemsSolved": 80, "easyRate": 1.0, "medRate": 0.95, "hardRate": 0.85, "hintsUsed": 0, "selfLevel": "Advanced", "label": "Expert" },
+  { "accuracy": 70, "avgTimeMin": 18, "problemsSolved": 15, "easyRate": 0.8, "medRate": 0.5, "hardRate": 0.1, "hintsUsed": 4, "selfLevel": "Beginner", "label": "Intermediate" }
+]

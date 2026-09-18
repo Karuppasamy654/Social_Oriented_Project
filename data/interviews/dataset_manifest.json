@@ -1,0 +1,13 @@
+{
+  "dataset_name": "CodeBuddy Normalized Company Interview Question Dataset",
+  "version": "1.0.0",
+  "generated_at": "2026-09-17T20:55:00Z",
+  "total_questions": 10,
+  "verified_reported_count": 10,
+  "paraphrased_count": 0,
+  "company_style_practice_count": 0,
+  "companies_represented": ["NVIDIA", "Google", "Amazon", "Microsoft", "Meta"],
+  "roles_represented": ["Software Engineer Intern", "Software Engineering Intern", "SDE Intern"],
+  "licensing": "Public Candidate Reports & Research Archive (Non-Copyrighted Terms Summary)",
+  "validation_status": "PASSED"
+}

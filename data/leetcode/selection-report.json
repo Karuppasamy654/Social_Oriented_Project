@@ -1,0 +1,40 @@
+{
+  "total": 500,
+  "difficulty": {
+    "Easy": 200,
+    "Medium": 250,
+    "Hard": 50
+  },
+  "topicCounts": {
+    "Array": 230,
+    "Hash Table": 85,
+    "Linked List": 40,
+    "Math": 42,
+    "Recursion": 44,
+    "String": 105,
+    "Sliding Window": 16,
+    "Binary Search": 51,
+    "Divide and Conquer": 10,
+    "Dynamic Programming": 82,
+    "Two Pointers": 62,
+    "Greedy": 16,
+    "Sorting": 51,
+    "Stack": 21,
+    "Bit Manipulation": 10,
+    "Tree": 82,
+    "Binary Tree": 57,
+    "DFS": 50,
+    "BFS": 47,
+    "Backtracking": 51,
+    "Matrix": 31,
+    "Intervals": 8,
+    "BST": 8,
+    "Union Find": 11,
+    "Graph": 7,
+    "Topological Sort": 7,
+    "Trie": 7,
+    "Heap / Priority Queue": 19,
+    "Queue": 4
+  },
+  "uniqueProblemIds": 500
+}

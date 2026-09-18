@@ -1,0 +1,331 @@
+{
+  "companies": 15,
+  "targetProblemsPerCompany": 30,
+  "targetAssignments": 450,
+  "companiesData": {
+    "Adobe": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 14,
+      "topics": [
+        "Array",
+        "Binary Search",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Greedy",
+        "Hash Table",
+        "Linked List",
+        "Math",
+        "Recursion",
+        "Sliding Window",
+        "Sorting",
+        "Stack",
+        "String",
+        "Two Pointers"
+      ]
+    },
+    "Amazon": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 14,
+      "topics": [
+        "Array",
+        "Binary Search",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Greedy",
+        "Hash Table",
+        "Linked List",
+        "Math",
+        "Recursion",
+        "Sliding Window",
+        "Sorting",
+        "Stack",
+        "String",
+        "Two Pointers"
+      ]
+    },
+    "Apple": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 14,
+      "topics": [
+        "Array",
+        "Binary Search",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Greedy",
+        "Hash Table",
+        "Linked List",
+        "Math",
+        "Recursion",
+        "Sliding Window",
+        "Sorting",
+        "Stack",
+        "String",
+        "Two Pointers"
+      ]
+    },
+    "Atlassian": {
+      "selected": 30,
+      "easy": 6,
+      "medium": 18,
+      "hard": 6,
+      "topicsCovered": 6,
+      "topics": [
+        "Array",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Hash Table",
+        "Sliding Window",
+        "String"
+      ]
+    },
+    "Bloomberg": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 14,
+      "topics": [
+        "Array",
+        "Binary Search",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Greedy",
+        "Hash Table",
+        "Linked List",
+        "Math",
+        "Recursion",
+        "Sliding Window",
+        "Sorting",
+        "Stack",
+        "String",
+        "Two Pointers"
+      ]
+    },
+    "Cisco": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 13,
+      "topics": [
+        "Array",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Greedy",
+        "Hash Table",
+        "Linked List",
+        "Math",
+        "Recursion",
+        "Sliding Window",
+        "Sorting",
+        "Stack",
+        "String",
+        "Two Pointers"
+      ]
+    },
+    "Flipkart": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 11,
+      "topics": [
+        "Array",
+        "Binary Search",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Greedy",
+        "Hash Table",
+        "Sliding Window",
+        "Sorting",
+        "Stack",
+        "String",
+        "Two Pointers"
+      ]
+    },
+    "Goldman Sachs": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 14,
+      "topics": [
+        "Array",
+        "Binary Search",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Greedy",
+        "Hash Table",
+        "Linked List",
+        "Math",
+        "Recursion",
+        "Sliding Window",
+        "Sorting",
+        "Stack",
+        "String",
+        "Two Pointers"
+      ]
+    },
+    "Google": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 14,
+      "topics": [
+        "Array",
+        "Binary Search",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Greedy",
+        "Hash Table",
+        "Linked List",
+        "Math",
+        "Recursion",
+        "Sliding Window",
+        "Sorting",
+        "Stack",
+        "String",
+        "Two Pointers"
+      ]
+    },
+    "JPMorgan": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 7,
+      "topics": [
+        "Array",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Hash Table",
+        "Sliding Window",
+        "Stack",
+        "String"
+      ]
+    },
+    "Meta": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 14,
+      "topics": [
+        "Array",
+        "Binary Search",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Greedy",
+        "Hash Table",
+        "Linked List",
+        "Math",
+        "Recursion",
+        "Sliding Window",
+        "Sorting",
+        "Stack",
+        "String",
+        "Two Pointers"
+      ]
+    },
+    "Microsoft": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 14,
+      "topics": [
+        "Array",
+        "Binary Search",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Greedy",
+        "Hash Table",
+        "Linked List",
+        "Math",
+        "Recursion",
+        "Sliding Window",
+        "Sorting",
+        "Stack",
+        "String",
+        "Two Pointers"
+      ]
+    },
+    "NVIDIA": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 13,
+      "topics": [
+        "Array",
+        "Binary Search",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Greedy",
+        "Hash Table",
+        "Linked List",
+        "Math",
+        "Recursion",
+        "Sliding Window",
+        "Stack",
+        "String",
+        "Two Pointers"
+      ]
+    },
+    "Uber": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 8,
+      "topics": [
+        "Array",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Hash Table",
+        "Linked List",
+        "Recursion",
+        "Stack",
+        "String"
+      ]
+    },
+    "Walmart": {
+      "selected": 30,
+      "easy": 8,
+      "medium": 16,
+      "hard": 6,
+      "topicsCovered": 11,
+      "topics": [
+        "Array",
+        "Binary Search",
+        "Divide and Conquer",
+        "Dynamic Programming",
+        "Greedy",
+        "Hash Table",
+        "Sliding Window",
+        "Sorting",
+        "Stack",
+        "String",
+        "Two Pointers"
+      ]
+    }
+  },
+  "actualAssignments": 450,
+  "uniqueProblems": 230,
+  "difficultyDistribution": {
+    "Easy": 118,
+    "Medium": 242,
+    "Hard": 90
+  },
+  "totalTopicsCovered": 14
+}

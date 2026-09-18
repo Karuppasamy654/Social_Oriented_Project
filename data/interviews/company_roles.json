@@ -1,0 +1,83 @@
+{
+  "companies": [
+    {
+      "id": "nvidia",
+      "name": "NVIDIA",
+      "roles": [
+        "Software Engineer Intern",
+        "Entry-Level Software Engineer",
+        "Systems Software Engineer",
+        "AI/ML Engineer"
+      ],
+      "interview_types": ["Technical", "HR / Behavioral", "Mixed", "Coding"],
+      "default_duration_minutes": 45
+    },
+    {
+      "id": "google",
+      "name": "Google",
+      "roles": [
+        "Software Engineering Intern",
+        "Associate Software Engineer",
+        "Software Engineer (L3)",
+        "Site Reliability Engineer"
+      ],
+      "interview_types": ["Technical", "HR / Behavioral", "Mixed", "Coding"],
+      "default_duration_minutes": 45
+    },
+    {
+      "id": "amazon",
+      "name": "Amazon",
+      "roles": [
+        "SDE Intern",
+        "SDE I",
+        "SDE II",
+        "Front-End Engineer"
+      ],
+      "interview_types": ["Technical", "HR / Behavioral", "Mixed", "Coding"],
+      "default_duration_minutes": 60
+    },
+    {
+      "id": "microsoft",
+      "name": "Microsoft",
+      "roles": [
+        "Software Engineer Intern",
+        "Software Engineer (Level 59-60)",
+        "Full-Stack Engineer"
+      ],
+      "interview_types": ["Technical", "HR / Behavioral", "Mixed", "Coding"],
+      "default_duration_minutes": 45
+    },
+    {
+      "id": "meta",
+      "name": "Meta",
+      "roles": [
+        "Software Engineer Intern",
+        "Rotational Software Engineer",
+        "Production Engineer"
+      ],
+      "interview_types": ["Technical", "HR / Behavioral", "Mixed", "Coding"],
+      "default_duration_minutes": 45
+    },
+    {
+      "id": "apple",
+      "name": "Apple",
+      "roles": [
+        "Software Development Intern",
+        "Core OS Engineer",
+        "Software Engineer"
+      ],
+      "interview_types": ["Technical", "HR / Behavioral", "Mixed", "Coding"],
+      "default_duration_minutes": 45
+    },
+    {
+      "id": "uber",
+      "name": "Uber",
+      "roles": [
+        "Software Engineering Intern",
+        "Software Engineer I"
+      ],
+      "interview_types": ["Technical", "HR / Behavioral", "Mixed", "Coding"],
+      "default_duration_minutes": 60
+    }
+  ]
+}

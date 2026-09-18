@@ -1,0 +1,14 @@
+{
+  "dataset_name": "CodeGroundedVivaDataset",
+  "version": "2.0.0",
+  "description": "Curated/Synthetic Development Dataset containing verified C++ code submissions, extracted line evidence, grounded candidate questions, and explicit negative grounding test cases.",
+  "provenance": "Curated/Synthetic Development Dataset",
+  "total_positive_examples": 3,
+  "total_negative_examples": 6,
+  "file_manifest": {
+    "positive_examples": "positive_examples.jsonl",
+    "negative_examples": "negative_examples.jsonl"
+  },
+  "supported_languages": ["cpp17"],
+  "integrity_status": "verified_100_percent_grounded"
+}

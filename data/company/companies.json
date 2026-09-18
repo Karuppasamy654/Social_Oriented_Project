@@ -1,0 +1,17 @@
+[
+  { "id": "amazon", "name": "Amazon", "folder": "amazon", "tier": "MAANG", "logo": "https://logo.clearbit.com/amazon.com" },
+  { "id": "microsoft", "name": "Microsoft", "folder": "microsoft", "tier": "Big Tech", "logo": "https://logo.clearbit.com/microsoft.com" },
+  { "id": "google", "name": "Google", "folder": "google", "tier": "MAANG", "logo": "https://logo.clearbit.com/google.com" },
+  { "id": "meta", "name": "Meta", "folder": "meta", "tier": "MAANG", "logo": "https://logo.clearbit.com/meta.com" },
+  { "id": "apple", "name": "Apple", "folder": "apple", "tier": "MAANG", "logo": "https://logo.clearbit.com/apple.com" },
+  { "id": "adobe", "name": "Adobe", "folder": "adobe", "tier": "Enterprise Tech", "logo": "https://logo.clearbit.com/adobe.com" },
+  { "id": "nvidia", "name": "NVIDIA", "folder": "nvidia", "tier": "AI & Semiconductors", "logo": "https://logo.clearbit.com/nvidia.com" },
+  { "id": "cisco", "name": "Cisco", "folder": "cisco", "tier": "Networking & Cloud", "logo": "https://logo.clearbit.com/cisco.com" },
+  { "id": "jpmorgan", "name": "JPMorgan", "folder": "jpmorgan", "tier": "Fintech & Banking", "logo": "https://logo.clearbit.com/jpmorganchase.com" },
+  { "id": "goldman-sachs", "name": "Goldman Sachs", "folder": "goldman-sachs", "tier": "Fintech & Banking", "logo": "https://logo.clearbit.com/goldmansachs.com" },
+  { "id": "walmart", "name": "Walmart", "folder": "walmart-labs", "tier": "E-Commerce & Retail", "logo": "https://logo.clearbit.com/walmart.com" },
+  { "id": "uber", "name": "Uber", "folder": "uber", "tier": "Ridehailing & Mobility", "logo": "https://logo.clearbit.com/uber.com" },
+  { "id": "atlassian", "name": "Atlassian", "folder": "atlassian", "tier": "SaaS & Productivity", "logo": "https://logo.clearbit.com/atlassian.com" },
+  { "id": "bloomberg", "name": "Bloomberg", "folder": "bloomberg", "tier": "Financial Data & Software", "logo": "https://logo.clearbit.com/bloomberg.com" },
+  { "id": "flipkart", "name": "Flipkart", "folder": "flipkart", "tier": "E-Commerce", "logo": "https://logo.clearbit.com/flipkart.com" }
+]

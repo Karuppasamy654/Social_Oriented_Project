@@ -1,0 +1,108 @@
+{
+  "version": "v3.0.0",
+  "winning_models": {
+    "topic_classification": "Naive Bayes",
+    "skill_classification": "Random Forest"
+  },
+  "topic_taxonomy": [
+    "Array",
+    "String",
+    "HashMap",
+    "Two Pointer",
+    "Sliding Window",
+    "Linked List",
+    "Stack",
+    "Queue",
+    "Binary Tree",
+    "BST",
+    "Heap",
+    "Priority Queue",
+    "Graph",
+    "BFS",
+    "DFS",
+    "Backtracking",
+    "Greedy",
+    "Dynamic Programming",
+    "Trie",
+    "Union Find",
+    "Bit Manipulation",
+    "Recursion",
+    "Sorting",
+    "Binary Search",
+    "Prefix Sum",
+    "Matrix",
+    "Intervals"
+  ],
+  "skill_classes": [
+    "Beginner",
+    "Intermediate",
+    "Advanced",
+    "Expert"
+  ],
+  "eval_metrics": {
+    "topic_classifier": {
+      "Logistic Regression": {
+        "Accuracy": 0.88,
+        "Micro F1": 0.875,
+        "Macro F1": 0.865,
+        "Hamming Loss": 0.045
+      },
+      "Linear SVM": {
+        "Accuracy": 0.895,
+        "Micro F1": 0.89,
+        "Macro F1": 0.881,
+        "Hamming Loss": 0.041
+      },
+      "Random Forest": {
+        "Accuracy": 0.91,
+        "Micro F1": 0.905,
+        "Macro F1": 0.895,
+        "Hamming Loss": 0.035
+      },
+      "Gradient Boosting": {
+        "Accuracy": 0.925,
+        "Micro F1": 0.918,
+        "Macro F1": 0.912,
+        "Hamming Loss": 0.029
+      },
+      "Naive Bayes": {
+        "Accuracy": 0.945,
+        "Micro F1": 0.938,
+        "Macro F1": 0.932,
+        "Hamming Loss": 0.021
+      }
+    },
+    "skill_classifier": {
+      "Logistic Regression": {
+        "Accuracy": 0.842,
+        "Precision": 0.84,
+        "Recall": 0.842,
+        "F1-Score": 0.8405
+      },
+      "Decision Tree": {
+        "Accuracy": 0.865,
+        "Precision": 0.862,
+        "Recall": 0.865,
+        "F1-Score": 0.863
+      },
+      "Random Forest": {
+        "Accuracy": 0.942,
+        "Precision": 0.94,
+        "Recall": 0.942,
+        "F1-Score": 0.941
+      },
+      "Gradient Boosting": {
+        "Accuracy": 0.921,
+        "Precision": 0.92,
+        "Recall": 0.921,
+        "F1-Score": 0.9205
+      },
+      "Linear SVM": {
+        "Accuracy": 0.854,
+        "Precision": 0.852,
+        "Recall": 0.854,
+        "F1-Score": 0.8525
+      }
+    }
+  }
+}

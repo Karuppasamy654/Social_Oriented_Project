@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LeetCodeProblemSchema",
+  "type": "object",
+  "required": ["externalId", "title", "difficulty", "description", "topics", "starterCode"],
+  "properties": {
+    "externalSource": { "type": "string" },
+    "externalId": { "type": "string" },
+    "title": { "type": "string", "minLength": 1 },
+    "slug": { "type": "string" },
+    "description": { "type": "string", "minLength": 1 },
+    "difficulty": {
+      "type": "string",
+      "enum": ["Easy", "Medium", "Hard"]
+    },
+    "topics": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "constraints": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "examples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "input": { "type": "string" },
+          "output": { "type": "string" },
+          "explanation": { "type": "string" }
+        }
+      }
+    },
+    "starterCode": {
+      "type": "object",
+      "required": ["cpp", "javascript", "python"],
+      "properties": {
+        "cpp": { "type": "string" },
+        "javascript": { "type": "string" },
+        "python": { "type": "string" }
+      }
+    },
+    "sampleTestCases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["input", "expectedOutput"],
+        "properties": {
+          "input": { "type": "string" },
+          "expectedOutput": { "type": "string" }
+        }
+      }
+    }
+  }
+}

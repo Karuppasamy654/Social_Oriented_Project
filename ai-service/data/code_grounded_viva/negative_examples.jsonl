@@ -1,0 +1,6 @@
+{"problem_id":"two-sum","code":"vector<int> twoSum(vector<int>& nums, int target) { for (int i = 0; i < nums.size(); i++) { for (int j = i + 1; j < nums.size(); j++) { if (nums[i] + nums[j] == target) return {i, j}; } } return {}; }","question":"You declared `seen` as an unordered_map. What is stored in `seen`?","valid":false,"reason":"invalid_nonexistent_construct"}
+{"problem_id":"two-sum","code":"vector<int> twoSum(vector<int>& nums, int target) { for (int i = 0; i < nums.size(); i++) { for (int j = i + 1; j < nums.size(); j++) { if (nums[i] + nums[j] == target) return {i, j}; } } return {}; }","question":"Why did you use unordered_map?","valid":false,"reason":"invalid_reference_contamination"}
+{"problem_id":"two-sum","code":"vector<int> twoSum(vector<int>& nums, int target) { int x = nums[i] + nums[j]; }","question":"Why is x a hash key?","valid":false,"reason":"invalid_semantic_role"}
+{"problem_id":"two-sum","code":"vector<int> twoSum(...)","question":"What is a hash map?","valid":false,"reason":"invalid_generic_textbook"}
+{"problem_id":"two-sum","code":"vector<int> twoSum(...)","question":"Why is Two Sum useful?","valid":false,"reason":"invalid_problem_only"}
+{"problem_id":"two-sum","code":"vector<int> twoSum(...)","question":"Why is your recursive base case important in twoSum?","valid":false,"reason":"invalid_nonexistent_construct"}
