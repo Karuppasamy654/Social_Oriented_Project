@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+**/.pytest_cache/
+venv/
+.venv/
+env/
+
+# Environment / Secret Files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!*.env.example
+
+# Build / Output
+dist/
+**/dist/
+build/
+**/build/
+.next/
+
+# Temp / Cache / Logs
+temp_repo_inspect/
+.cache/
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
