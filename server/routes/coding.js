@@ -15,7 +15,7 @@ router.post('/analysis/start', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'submission_id is required' });
     }
 
-    const submission = await Submission.findOne({ submissionId: targetSubId });
+    const submission = await Submission.findOne({ submissionId: targetSubId, userId: req.user.id || req.user._id });
     if (!submission) {
       return res.status(404).json({ error: 'Submission snapshot not found' });
     }
@@ -49,7 +49,7 @@ router.post('/viva/start', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'submission_id is required' });
     }
 
-    const submission = await Submission.findOne({ submissionId: targetSubId });
+    const submission = await Submission.findOne({ submissionId: targetSubId, userId: req.user.id || req.user._id });
     if (!submission) {
       return res.status(404).json({ error: 'Submission snapshot not found' });
     }
@@ -64,6 +64,13 @@ router.post('/viva/start', authMiddleware, async (req, res) => {
 
     if (!vivaData) {
       return res.status(500).json({ error: 'Failed to start Viva session in AI microservice' });
+    }
+
+    if (vivaData.viva_session_id) {
+      await Submission.updateOne(
+        { _id: submission._id, userId: req.user.id || req.user._id },
+        { $set: { vivaSessionId: vivaData.viva_session_id } }
+      );
     }
 
     return res.json(vivaData);
@@ -81,6 +88,8 @@ router.post('/viva/answer', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'viva_session_id, question_id, and selected_index are required' });
     }
 
+    const ownedSubmission = await Submission.findOne({ vivaSessionId: viva_session_id, userId: req.user.id || req.user._id });
+    if (!ownedSubmission) return res.status(404).json({ error: 'Viva session not found' });
     const vivaData = await pythonService.answerVivaQuestion(viva_session_id, question_id, selected_index);
     if (!vivaData) {
       return res.status(500).json({ error: 'Failed to record Viva answer' });
@@ -89,7 +98,7 @@ router.post('/viva/answer', authMiddleware, async (req, res) => {
     // Update submission record if completed
     if (vivaData.submission_id && vivaData.status !== 'active') {
       await Submission.findOneAndUpdate(
-        { submissionId: vivaData.submission_id },
+        { submissionId: vivaData.submission_id, userId: req.user.id || req.user._id },
         { $set: { understandingScore: Math.round((vivaData.score || 0) * 100) } }
       );
     }
@@ -109,6 +118,8 @@ router.post('/viva/next', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'viva_session_id is required' });
     }
 
+    const ownedSubmission = await Submission.findOne({ vivaSessionId: viva_session_id, userId: req.user.id || req.user._id });
+    if (!ownedSubmission) return res.status(404).json({ error: 'Viva session not found' });
     const vivaData = await pythonService.getVivaSession(viva_session_id);
     return res.json(vivaData);
   } catch (err) {
@@ -125,6 +136,8 @@ router.post('/viva/finish', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'viva_session_id is required' });
     }
 
+    const ownedSubmission = await Submission.findOne({ vivaSessionId: viva_session_id, userId: req.user.id || req.user._id });
+    if (!ownedSubmission) return res.status(404).json({ error: 'Viva session not found' });
     const vivaData = await pythonService.getVivaSession(viva_session_id);
     return res.json(vivaData);
   } catch (err) {
@@ -137,7 +150,7 @@ router.post('/viva/finish', authMiddleware, async (req, res) => {
 router.get('/report/:sessionId', authMiddleware, async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const submission = await Submission.findOne({ $or: [{ sessionId }, { submissionId: sessionId }] })
+    const submission = await Submission.findOne({ userId: req.user.id || req.user._id, $or: [{ sessionId }, { submissionId: sessionId }] })
       .populate('problemId')
       .lean();
 

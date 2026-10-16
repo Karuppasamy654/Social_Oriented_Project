@@ -59,12 +59,8 @@ router.get('/', optionalAuthMiddleware, async (req, res) => {
       ];
     }
 
-    const totalRecords = await Problem.countDocuments(filter);
-    const problems = await Problem.find(filter)
-      .select('-hiddenTestCases')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limitNum);
+    const allMatchingProblems = await Problem.find(filter)
+      .select('-hiddenTestCases');
 
     // Calculate real student status if user is authenticated
     let userSubmissionsMap = {};
@@ -80,14 +76,39 @@ router.get('/', optionalAuthMiddleware, async (req, res) => {
       });
     }
 
-    const enrichedProblems = problems.map(prob => {
+    // Enrich problems with status and numeric ID
+    const enrichedProblems = allMatchingProblems.map((prob, idx) => {
       const probObj = prob.toObject();
       probObj.status = userSubmissionsMap[prob._id.toString()] || 'Not Attempted';
+
+      let numId = parseInt(probObj.externalId, 10);
+      if (isNaN(numId)) {
+        const match = String(probObj.title || '').match(/#?(\d+)/);
+        numId = match ? parseInt(match[1], 10) : (idx + 1);
+      }
+      probObj.numericId = numId;
       return probObj;
     });
 
+    // SORT RULE:
+    // 1. Unsolved problems ('Not Attempted', 'Attempted') come FIRST, ordered by numericId ascending.
+    // 2. Solved problems ('Solved') come LAST, ordered by numericId ascending.
+    enrichedProblems.sort((a, b) => {
+      const aSolved = a.status === 'Solved' ? 1 : 0;
+      const bSolved = b.status === 'Solved' ? 1 : 0;
+
+      if (aSolved !== bSolved) {
+        return aSolved - bSolved; // Unsolved (0) before Solved (1)
+      }
+
+      return a.numericId - b.numericId;
+    });
+
+    const totalRecords = enrichedProblems.length;
+    const paginatedProblems = enrichedProblems.slice(skip, skip + limitNum);
+
     return res.json({
-      problems: enrichedProblems,
+      problems: paginatedProblems,
       pagination: {
         total: totalRecords,
         page: pageNum,

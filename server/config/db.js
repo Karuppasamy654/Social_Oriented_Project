@@ -9,6 +9,7 @@ async function connectDB() {
     return true;
   } catch (err) {
     console.warn('⚠️ Standard MongoDB unavailable. Launching MongoMemoryServer fallback...');
+
     try {
       const { MongoMemoryServer } = require('mongodb-memory-server');
       const mongod = await MongoMemoryServer.create();

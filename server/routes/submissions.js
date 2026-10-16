@@ -193,10 +193,9 @@ router.post('/run', authMiddleware, async (req, res) => {
       ]
     });
 
-    const sampleTests = problem?.sampleTestCases || [
-      { input: "[2, 7, 11, 15]\n9", expectedOutput: "[0,1]" },
-      { input: "[3, 2, 4]\n6", expectedOutput: "[1,2]" }
-    ];
+    if (!problem) return res.status(404).json({ error: 'Problem not found' });
+    const sampleTests = problem.sampleTestCases || [];
+    if (sampleTests.length === 0) return res.status(422).json({ error: 'This problem has no configured sample tests.' });
 
     const runResult = await codeExecutionService.executeSampleTests(sourceCode, sampleTests);
 
@@ -213,7 +212,7 @@ router.post('/run', authMiddleware, async (req, res) => {
     });
   } catch (err) {
     console.error('Error in /run:', err);
-    return res.status(500).json({ error: 'Failed to run code.' });
+    return res.status(err.statusCode || 500).json({ error: err.message || 'Failed to run code.' });
   }
 });
 
@@ -243,11 +242,31 @@ router.post('/submit', authMiddleware, async (req, res) => {
     // Execute full submission against visible + hidden test cases
     const visibleCases = problem.sampleTestCases || [];
     const hiddenCases = problem.hiddenTestCases || [];
+    if (visibleCases.length === 0 || hiddenCases.length === 0) {
+      return res.status(422).json({ error: 'This problem is not ready for submission because its test cases are incomplete.' });
+    }
     const execResult = await codeExecutionService.executeFullSubmission(sourceCode, visibleCases, hiddenCases);
 
     const subId = 'sub_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
 
-    // Save Submission record to MongoDB
+    let aiCodeAnalysis = null;
+    try {
+      const staticAnalysis = await pythonService.analyzeCodeStatic(sourceCode, language);
+      if (staticAnalysis) {
+        aiCodeAnalysis = {
+          timeComplexity: staticAnalysis.estimated_time_complexity || 'Unknown',
+          spaceComplexity: staticAnalysis.estimated_space_complexity || 'Unknown',
+          confidence: Number(staticAnalysis.confidence || 0),
+          evidence: Array.isArray(staticAnalysis.evidence) ? staticAnalysis.evidence : [],
+          whatDidWell: [],
+          whatCanBeImproved: Array.isArray(staticAnalysis.potential_anti_patterns) ? staticAnalysis.potential_anti_patterns : []
+        };
+      }
+    } catch (_) {
+      // Analysis is optional; execution and persistence must not claim an AI result.
+    }
+
+    // Save the execution result and any real AI analysis to MongoDB.
     const submission = await Submission.create({
       submissionId: subId,
       userId,
@@ -271,14 +290,7 @@ router.post('/submit', authMiddleware, async (req, res) => {
       memoryKb: 1024,
       compilerOutput: execResult.compileError || '',
       isPublic: true,
-      aiCodeAnalysis: {
-        timeComplexity: 'O(N)',
-        spaceComplexity: 'O(N)',
-        confidence: 0.90,
-        evidence: ['Used optimal single-pass algorithmic approach'],
-        whatDidWell: ['Efficient execution time', 'Clean code structure'],
-        whatCanBeImproved: ['Add edge case boundary checks']
-      }
+      ...(aiCodeAnalysis ? { aiCodeAnalysis } : {})
     });
 
     // Record Activity
@@ -293,7 +305,8 @@ router.post('/submit', authMiddleware, async (req, res) => {
     // Sync User Stats, Streaks, Achievements & Solved Problems
     await syncUserStatsAndAchievements(userId);
 
-    // Generate AI Understanding Questions (Viva)
+    // Generate code-grounded understanding questions. If AI is unavailable, do
+    // not fabricate questions or claim that analysis completed.
     let understandingQuestions = [];
     try {
       understandingQuestions = await pythonService.generateUnderstandingQuestions(
@@ -301,33 +314,13 @@ router.post('/submit', authMiddleware, async (req, res) => {
         problem.title,
         language
       );
-    } catch (aiErr) {
-      // Fallback understanding questions
-      understandingQuestions = [
-        {
-          id: 'q1',
-          question: `What is the time complexity of your solution for ${problem.title}?`,
-          options: ['O(N)', 'O(N log N)', 'O(N^2)', 'O(1)'],
-          correct_option_index: 0,
-          correct_answer: 'O(N)',
-          explanation: 'The solution traverses the array elements once.'
-        },
-        {
-          id: 'q2',
-          question: 'Which data structure was utilized to optimize element lookups?',
-          options: ['Hash Map / unordered_map', 'Sorted Array', 'Binary Search Tree', 'Stack'],
-          correct_option_index: 0,
-          correct_answer: 'Hash Map / unordered_map',
-          explanation: 'Hash maps provide average O(1) lookup time.'
-        }
-      ];
-    }
+    } catch (_) { /* AI service is optional; return no questions when unavailable. */ }
 
     return res.json({
       verdict: execResult.verdict,
       totalPassed: execResult.totalPassed,
       totalCases: execResult.totalCases,
-      durationSeconds: 12,
+      durationSeconds: 0,
       submissionId: subId,
       aiAnalysis: submission.aiCodeAnalysis,
       understandingQuestions,
@@ -335,7 +328,7 @@ router.post('/submit', authMiddleware, async (req, res) => {
     });
   } catch (err) {
     console.error('Error in /submit:', err);
-    return res.status(500).json({ error: 'Failed to evaluate submission.' });
+    return res.status(err.statusCode || 500).json({ error: err.message || 'Failed to evaluate submission.' });
   }
 });
 
@@ -360,7 +353,7 @@ router.post('/verify', authMiddleware, async (req, res) => {
 
     if (sessionId) {
       await Submission.findOneAndUpdate(
-        { $or: [{ sessionId }, { submissionId: sessionId }] },
+        { userId: req.user.id || req.user._id, $or: [{ sessionId }, { submissionId: sessionId }] },
         { $set: { understandingScore: score } }
       );
     }

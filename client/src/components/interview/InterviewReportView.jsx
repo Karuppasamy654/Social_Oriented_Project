@@ -219,15 +219,17 @@ export default function InterviewReportView({ report, session, onRestart }) {
 
       {/* ML Readiness & Preparation Roadmap */}
       <div className="bg-surface-secondary border border-surface-border rounded-2xl p-6 space-y-4 text-xs">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-surface-border pb-3">
           <h3 className="font-bold text-accent-cyan uppercase tracking-wider text-xs flex items-center gap-2">
-            <Target className="w-4 h-4" />
-            <span>{prepPlan.target_company} Evidence-Based Preparation Roadmap</span>
+            <Target className="w-4 h-4 text-accent-cyan" />
+            <span>{prepPlan.target_company} ML-Classified Preparation Roadmap</span>
           </h3>
-          <span className="text-[10px] font-mono text-gray-400">
-            ML Prediction: <span className="text-white">{mlPrediction.prediction}</span>
-          </span>
+          <div className="px-3 py-1 rounded-xl bg-accent-blue/10 border border-accent-blue/30 text-accent-cyan font-mono text-[11px] flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{mlPrediction.model || 'Random Forest Classifier'}: <strong>{mlPrediction.verifiedLevel || mlPrediction.prediction}</strong> ({mlPrediction.confidence || mlPrediction.confidenceScore + '%'} confidence)</span>
+          </div>
         </div>
+
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>

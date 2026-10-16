@@ -36,3 +36,7 @@ temp_repo_inspect/
 # System files
 .DS_Store
 Thumbs.db
+
+.env
+.env.*
+!.env.example

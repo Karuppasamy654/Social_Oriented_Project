@@ -5,8 +5,9 @@ const interviewSessionSchema = new mongoose.Schema({
   company: { type: String, required: true }, // e.g. Amazon, NVIDIA, Google, Microsoft
   role: { type: String, required: true, default: 'Software Engineer' }, // SDE Intern, Software Engineer, Backend
   targetLevel: { type: String, required: true, default: 'Intermediate' }, // Beginner, Intermediate, Advanced
-  durationMinutes: { type: Number, default: 45 },
-  problemCount: { type: Number, default: 30 },
+  durationMinutes: { type: Number, enum: [15, 30], default: 15 },
+  problemCount: { type: Number, enum: [2, 3], default: 2 },
+  endsAt: { type: Date, default: () => new Date(Date.now() + 15 * 60 * 1000) },
   currentQIndex: { type: Number, default: 0 },
   
   questions: [{

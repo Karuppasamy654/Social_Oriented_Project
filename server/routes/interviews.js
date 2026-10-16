@@ -1,598 +1,271 @@
 const express = require('express');
-const router = express.Router();
-const path = require('path');
 const fs = require('fs');
-const axios = require('axios');
+const path = require('path');
 const InterviewSession = require('../models/InterviewSession');
-const CompanyProblem = require('../models/CompanyProblem');
-const Problem = require('../models/Problem');
-const User = require('../models/User');
 const { authMiddleware, optionalAuthMiddleware } = require('../middleware/auth');
+const { startInterviewSession, evaluateQuestionSubmission, selectNextAdaptiveQuestion, evaluateInterview, getInterviewRoundConfig } = require('../ai/interviewService');
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+const router = express.Router();
 
-// 1. GET /api/interviews/companies - List companies with problem counts & metadata
-router.get('/companies', optionalAuthMiddleware, async (req, res) => {
-  try {
-    const companyRolesPath = path.join(__dirname, '../../data/interviews/company_roles.json');
-    let companiesMeta = [];
-    if (fs.existsSync(companyRolesPath)) {
-      const data = JSON.parse(fs.readFileSync(companyRolesPath, 'utf8'));
-      companiesMeta = data.companies || [];
-    } else {
-      companiesMeta = [
-        { id: "nvidia", name: "NVIDIA", roles: ["Software Engineer Intern"], interview_types: ["Technical", "HR / Behavioral", "Mixed", "Coding"], default_duration_minutes: 45 },
-        { id: "google", name: "Google", roles: ["Software Engineering Intern"], interview_types: ["Technical", "HR / Behavioral", "Mixed", "Coding"], default_duration_minutes: 45 },
-        { id: "amazon", name: "Amazon", roles: ["SDE Intern"], interview_types: ["Technical", "HR / Behavioral", "Mixed", "Coding"], default_duration_minutes: 60 }
-      ];
-    }
+function loadCompanies() {
+  const file = path.join(__dirname, '../../data/interviews/company_roles.json');
+  if (!fs.existsSync(file)) return [];
+  return JSON.parse(fs.readFileSync(file, 'utf8')).companies || [];
+}
 
-    return res.json({
-      companies: companiesMeta,
-      totalCompanies: companiesMeta.length
-    });
-  } catch (err) {
-    console.error('Error fetching companies:', err);
-    return res.status(500).json({ message: 'Error fetching company list.' });
-  }
+async function toClientQuestion(question, index) {
+  const prob = question.problemId && question.problemId._id
+    ? question.problemId
+    : (question.slug ? await Problem.findOne({ slug: question.slug }) : null);
+
+  const sampleTestCases = (prob && prob.sampleTestCases && prob.sampleTestCases.length > 0)
+    ? prob.sampleTestCases.map(tc => ({ input: tc.input, expectedOutput: tc.expectedOutput, explanation: tc.explanation }))
+    : [{ input: "nums = [2, 7, 11, 15], target = 9", expectedOutput: "[0,1]", explanation: "Because nums[0] + nums[1] == 9, we return [0, 1]." }];
+
+  return {
+    question_id: `coding_${index + 1}`,
+    canonical_question: question.title,
+    question_text: question.description,
+    coding_problem_slug: question.slug,
+    difficulty: String(question.difficulty || 'Medium').toLowerCase(),
+    topics: question.topics || [],
+    starterCode: question.starterCode || (prob ? prob.starterCode : {}),
+    sampleTestCases
+  };
+}
+
+function isExpired(session) {
+  return new Date() >= new Date(session.endsAt);
+}
+
+async function finishSession(session) {
+  if (session.status === 'in_progress') session.status = 'completed';
+  const evaluation = evaluateInterview({ questions: session.questions, performanceHistory: session.performanceHistory, mistakesDetected: session.mistakesDetected || [] });
+  session.evaluation = {
+    overallScore: evaluation.overallScore || 0,
+    problemSolving: evaluation.problemSolving || 0,
+    codingScore: evaluation.codingScore || 0,
+    communicationScore: 0,
+    complexityAnalysisScore: evaluation.complexityAnalysisScore || 0,
+    edgeCasesScore: evaluation.edgeCasesScore || 0,
+    codeQualityScore: evaluation.codeQualityScore || 0,
+    strengths: evaluation.strengths,
+    weaknesses: evaluation.weaknesses,
+    recommendations: evaluation.recommendations
+  };
+  await session.save();
+  return evaluation;
+}
+
+router.get('/companies', optionalAuthMiddleware, (req, res) => {
+  const companies = loadCompanies().map(({ id, name, roles }) => ({ id, name, roles }));
+  return res.json({ companies, totalCompanies: companies.length });
 });
 
-// 2. GET /api/interviews/roles - Roles for a given company
-router.get('/roles', optionalAuthMiddleware, async (req, res) => {
-  try {
-    const { company } = req.query;
-    const companyRolesPath = path.join(__dirname, '../../data/interviews/company_roles.json');
-    let roles = ["Software Engineer Intern", "Software Engineer", "Systems Engineer"];
-    if (fs.existsSync(companyRolesPath)) {
-      const data = JSON.parse(fs.readFileSync(companyRolesPath, 'utf8'));
-      const found = (data.companies || []).find(c => c.name.toLowerCase() === (company || '').toLowerCase() || c.id.toLowerCase() === (company || '').toLowerCase());
-      if (found) roles = found.roles;
-    }
-    return res.json({ company: company || 'All', roles });
-  } catch (err) {
-    return res.status(500).json({ message: 'Error fetching roles.' });
-  }
+router.get('/roles', optionalAuthMiddleware, (req, res) => {
+  const company = loadCompanies().find(item => item.name.toLowerCase() === String(req.query.company || '').toLowerCase() || item.id === req.query.company);
+  return res.json({ company: req.query.company || '', roles: company?.roles || [] });
 });
 
-// 3. GET /api/interviews/sources - Provenance sources
-router.get('/sources', optionalAuthMiddleware, async (req, res) => {
+router.post(['/session/start', '/start'], authMiddleware, async (req, res) => {
   try {
-    const sourcesPath = path.join(__dirname, '../../data/interviews/interview_sources.jsonl');
-    const sources = [];
-    if (fs.existsSync(sourcesPath)) {
-      const lines = fs.readFileSync(sourcesPath, 'utf8').split('\n');
-      lines.forEach(line => {
-        if (line.trim()) sources.push(JSON.parse(line.trim()));
-      });
-    }
-    return res.json({ sources, count: sources.length });
-  } catch (err) {
-    return res.status(500).json({ message: 'Error fetching sources.' });
-  }
-});
+    const { company, role, level = 'Intermediate', durationMinutes } = req.body;
+    const minutes = Number(durationMinutes);
+    const roundConfig = getInterviewRoundConfig(minutes);
+    if (!company || !roundConfig) return res.status(400).json({ message: 'Choose a 15- or 30-minute coding round.' });
+    const companyMeta = loadCompanies().find(item => item.name.toLowerCase() === String(company).toLowerCase() || item.id === company);
+    if (!companyMeta) return res.status(400).json({ message: 'Choose a company available in the verified interview dataset.' });
+    if (!role || !companyMeta.roles.includes(role)) return res.status(400).json({ message: 'Choose a role listed for the selected company.' });
 
-// 4. POST /api/interviews/session/start - Start AI interview session
-router.post('/session/start', authMiddleware, async (req, res) => {
-  try {
-    const { company, role, level, interviewType, durationMinutes } = req.body;
-    if (!company) return res.status(400).json({ message: 'Company selection is required.' });
-
-    // Call Python AI Service
-    let pySession = null;
-    try {
-      const pyRes = await axios.post(`${AI_SERVICE_URL}/ml/interview/session/start`, {
-        user_id: req.user.id,
-        company: company,
-        role: role || 'Software Engineer Intern',
-        level: level || 'intern',
-        interview_type: interviewType || 'Technical',
-        duration_minutes: durationMinutes || 45,
-        weak_topics: ['arrays', 'graphs']
-      });
-      pySession = pyRes.data;
-    } catch (e) {
-      console.warn('Python AI service session start fallback active:', e.message);
-    }
-
-    const firstQ = (pySession && pySession.question_history && pySession.question_history.length > 0)
-      ? pySession.question_history[0]
-      : {
-          question_id: 'q_nv_2025_001',
-          canonical_question: 'Maximum Subarray Sum',
-          question_text: 'Given an array of integers, find contiguous subarray with maximum sum and explain complexity.',
-          question_type: 'dsa',
-          difficulty: 'medium',
-          verification_status: 'verified_reported',
-          provenance: 'Verified Candidate Report (2025)',
-          topics: ['arrays']
-        };
-
-    const initialSlug = firstQ.coding_problem_slug || 'maximum-subarray';
-    const dbProb = await Problem.findOne({ slug: initialSlug });
-
+    const sessionData = await startInterviewSession({ userId: req.user.id, company: companyMeta.name, role, durationMinutes: minutes });
+    if (!sessionData.questions?.length) return res.status(422).json({ message: 'No verified coding questions are available for this company.' });
     const session = await InterviewSession.create({
-      userId: req.user.id,
-      company: company,
-      role: role || 'Software Engineer Intern',
-      targetLevel: level || 'intern',
-      durationMinutes: durationMinutes || 45,
-      currentQIndex: 1,
-      questions: [{
-        problemId: dbProb ? dbProb._id : null,
-        title: firstQ.canonical_question,
-        slug: initialSlug,
-        description: firstQ.question_text,
-        difficulty: (firstQ.difficulty || 'Medium').charAt(0).toUpperCase() + (firstQ.difficulty || 'medium').slice(1),
-        topics: firstQ.topics || ['arrays'],
-        userCode: '',
-        status: 'unanswered'
-      }],
-      antiCheatLogs: [],
-      status: 'in_progress'
+      ...sessionData,
+      targetLevel: level,
+      durationMinutes: roundConfig.durationMinutes,
+      problemCount: roundConfig.problemCount,
+      endsAt: new Date(Date.now() + roundConfig.durationMinutes * 60 * 1000),
+      currentQIndex: 0
     });
-
-    return res.json({
+    return res.status(201).json({
       sessionId: session._id,
-      pySessionId: pySession ? pySession.session_id : session._id.toString(),
       company: session.company,
       role: session.role,
-      level: session.targetLevel,
-      currentQuestion: firstQ,
-      session
+      durationMinutes: session.durationMinutes,
+      problemCount: session.problemCount,
+      endsAt: session.endsAt,
+      currentQuestion: await toClientQuestion(session.questions[0], 0)
     });
   } catch (err) {
     console.error('Start interview error:', err);
-    return res.status(500).json({ message: 'Error starting interview session.' });
+    return res.status(500).json({ message: 'Could not start the coding interview.' });
   }
 });
 
-// Backward compatibility alias for /start
-router.post('/start', authMiddleware, async (req, res) => {
-  req.url = '/session/start';
-  return router.handle(req, res);
-});
-
-// 5. GET /api/interviews/session/:sessionId - Fetch session detail
 router.get(['/session/:sessionId', '/:id'], authMiddleware, async (req, res) => {
+  const session = await InterviewSession.findOne({ _id: req.params.sessionId || req.params.id, userId: req.user.id });
+  if (!session) return res.status(404).json({ message: 'Interview session not found.' });
+  return res.json(session);
+});
+
+router.post(['/answer', '/:id/submit-question', '/:id/answer'], authMiddleware, async (req, res) => {
   try {
-    const sessionId = req.params.sessionId || req.params.id;
-    const session = await InterviewSession.findById(sessionId);
+    const sessionId = req.body.sessionId || req.params.id;
+    const session = await InterviewSession.findOne({ _id: sessionId, userId: req.user.id });
     if (!session) return res.status(404).json({ message: 'Interview session not found.' });
-
-    return res.json(session);
-  } catch (err) {
-    return res.status(500).json({ message: 'Error fetching session.' });
-  }
-});
-
-// 6. POST /api/interviews/question/next - Fetch next adaptive question
-router.post('/question/next', authMiddleware, async (req, res) => {
-  try {
-    const { sessionId, pySessionId } = req.body;
-    const sId = pySessionId || sessionId;
-
-    // Check if session is already terminated due to integrity threshold
-    if (sessionId) {
-      const session = await InterviewSession.findById(sessionId);
-      if (session && (session.status === 'terminated_integrity' || (session.antiCheatLogs && session.antiCheatLogs.length >= 5))) {
-        return res.json({
-          success: false,
-          completed: true,
-          terminated: true,
-          reason: 'integrity_threshold_reached',
-          status: 'terminated_integrity',
-          sessionId,
-          nextQuestion: null
-        });
-      }
+    if (session.status === 'terminated_integrity') {
+      const report = await finishSession(session);
+      return res.status(409).json({ terminated: true, completed: true, message: 'Interview session terminated due to integrity threshold.', report });
+    }
+    if (session.status !== 'in_progress' || isExpired(session)) {
+      const report = await finishSession(session);
+      return res.status(409).json({ completed: true, message: 'Time is over; your completed work has been evaluated.', report });
     }
 
-    let pyRes = null;
-    try {
-      const response = await axios.post(`${AI_SERVICE_URL}/ml/interview/question/next`, {
-        session_id: sId
-      });
-      pyRes = response.data;
-    } catch (e) {
-      console.warn('Python next question fallback:', e.message);
-    }
-
-    if (pyRes && (pyRes.completed || pyRes.terminated)) {
-      return res.json({
-        completed: true,
-        terminated: pyRes.terminated || false,
-        reason: pyRes.reason || null,
-        status: pyRes.status || 'completed',
-        nextQuestion: null
-      });
-    }
-
-    const nextQ = pyRes && pyRes.question ? pyRes.question : {
-      question_id: 'q_nv_2025_002',
-      canonical_question: 'Process vs Thread',
-      question_text: 'Explain difference between process and thread and how CUDA threads differ.',
-      question_type: 'os',
-      difficulty: 'medium',
-      verification_status: 'verified_reported',
-      provenance: 'Verified Candidate Report (2025)',
-      topics: ['operating_systems']
-    };
-
-    return res.json({
-      completed: false,
-      terminated: false,
-      nextQuestion: nextQ
+    const index = session.currentQIndex;
+    if (!req.body.userCode?.trim()) return res.status(400).json({ message: 'Submit code for the current question.' });
+    const result = await evaluateQuestionSubmission({ 
+      session, 
+      questionIndex: index, 
+      userCode: req.body.userCode, 
+      language: 'cpp', 
+      timeSpent: Math.max(0, Number(req.body.durationSeconds) || 0),
+      runOnly: Boolean(req.body.runOnly)
     });
-  } catch (err) {
-    return res.status(500).json({ message: 'Error fetching next question.' });
-  }
-});
-
-// Backward compatibility alias
-router.post('/:id/next', authMiddleware, async (req, res) => {
-  req.body.sessionId = req.params.id;
-  req.url = '/question/next';
-  return router.handle(req, res);
-});
-
-// 7. POST /api/interviews/answer - Submit answer transcript
-router.post('/answer', authMiddleware, async (req, res) => {
-  try {
-    const { evaluateQuestionSubmission } = require('../ai/interviewService');
-    const { sessionId, pySessionId, transcript, durationSeconds, userCode } = req.body;
-    const sId = pySessionId || sessionId;
-
-    // Check if session is already terminated due to integrity threshold
-    if (sessionId) {
-      const session = await InterviewSession.findById(sessionId);
-      if (session && (session.status === 'terminated_integrity' || (session.antiCheatLogs && session.antiCheatLogs.length >= 5))) {
-        return res.json({
-          success: false,
-          terminated: true,
-          reason: 'integrity_threshold_reached',
-          status: 'terminated_integrity',
-          message: 'Interview terminated due to integrity threshold. No further answers accepted.'
-        });
-      }
-
-      if (session) {
-        const qIndex = Math.max(0, session.questions.length - 1);
-        const evalResult = await evaluateQuestionSubmission({
-          session,
-          questionIndex: qIndex,
-          userCode: userCode || '// Code submission\n',
-          timeSpent: durationSeconds || 120
-        });
-
-        return res.json({
-          success: true,
-          evaluation: evalResult,
-          needs_followup: false
-        });
-      }
-    }
-
-    let evalRes = null;
-    try {
-      const pyRes = await axios.post(`${AI_SERVICE_URL}/ml/interview/answer`, {
-        session_id: sId,
-        transcript: transcript || '',
-        duration_seconds: durationSeconds || 30.0,
-        user_code: userCode
-      });
-      evalRes = pyRes.data;
-    } catch (e) {
-      evalRes = {
-        evaluation: {
-          technical_score: 85.0,
-          reasoning_score: 80.0,
-          completeness_score: 80.0,
-          total_score_pct: 83.5,
-          feedback: "Solid technical execution.",
-          weak_concepts: []
-        },
-        needs_followup: false
-      };
-    }
-
-    return res.json(evalRes);
+    return res.json({ success: true, evaluation: result, completed: session.performanceHistory.length >= session.problemCount });
   } catch (err) {
     console.error('Error submitting answer:', err);
-    return res.status(500).json({ message: 'Error submitting answer.' });
+    return res.status(err.statusCode || 500).json({ message: err.message || 'Could not evaluate code.' });
   }
+
 });
 
-// Backward compatibility alias
-router.post(['/:id/submit-question', '/:id/answer'], authMiddleware, async (req, res) => {
-  req.body.sessionId = req.params.id;
-  req.url = '/answer';
-  return router.handle(req, res);
-});
-
-// 8. POST /api/interviews/integrity-event - Log proctoring event & handle threshold
-router.post(['/integrity-event', '/:id/event'], authMiddleware, async (req, res) => {
+router.post(['/question/next', '/:id/next'], authMiddleware, async (req, res) => {
   try {
     const sessionId = req.body.sessionId || req.params.id;
-    const pySessionId = req.body.pySessionId || sessionId;
-    const eventType = req.body.eventType || req.body.event || 'tab_hidden';
-
-    let count = 0;
-    let isTerminated = false;
-
-    // 1. Log in MongoDB session
-    if (sessionId) {
-      const session = await InterviewSession.findById(sessionId);
-      if (session) {
-        // If already terminated, return idempotent response
-        if (session.status === 'terminated_integrity') {
-          return res.json({
-            success: true,
-            terminated: true,
-            reason: 'integrity_threshold_reached',
-            integrityFlagCount: session.antiCheatLogs.length,
-            status: 'terminated_integrity',
-            sessionId: session._id
-          });
-        }
-
-        session.antiCheatLogs.push({ event: eventType, timestamp: new Date() });
-        count = session.antiCheatLogs.length;
-
-        if (count >= 5) {
-          session.status = 'terminated_integrity';
-          isTerminated = true;
-          console.log(`[INTEGRITY] Session ${sessionId} reached 5 flags. Marking status = terminated_integrity.`);
-        }
-        await session.save();
-      }
+    const session = await InterviewSession.findOne({ _id: sessionId, userId: req.user.id });
+    if (!session) return res.status(404).json({ message: 'Interview session not found.' });
+    if (session.status !== 'in_progress' || isExpired(session) || session.performanceHistory.length >= session.problemCount) {
+      const report = await finishSession(session);
+      return res.json({ completed: true, report, nextQuestion: null });
     }
-
-    // 2. Log in Python AI service
-    let pyResult = null;
-    try {
-      const pyRes = await axios.post(`${AI_SERVICE_URL}/ml/interview/integrity-event`, {
-        session_id: pySessionId,
-        event_type: eventType,
-        duration_ms: req.body.durationMs || 1000,
-        severity: 'medium'
-      });
-      pyResult = pyRes.data;
-      if (pyResult.terminated) {
-        isTerminated = true;
-        count = pyResult.integrity_flag_count || count;
-      }
-    } catch (e) {}
-
-    if (isTerminated || count >= 5) {
-      return res.json({
-        success: true,
-        terminated: true,
-        reason: 'integrity_threshold_reached',
-        integrityFlagCount: count || 5,
-        status: 'terminated_integrity',
-        sessionId: sessionId,
-        message: 'Maximum integrity events (5) reached. Session gracefully terminated.'
-      });
+    const evaluatedCount = session.performanceHistory?.length || 0;
+    if (evaluatedCount <= session.currentQIndex && session.questions[session.currentQIndex]?.status !== 'evaluated') {
+      return res.status(409).json({ message: 'Submit the current coding question before continuing.' });
     }
-
-    return res.json({
-      success: true,
-      terminated: false,
-      integrityFlagCount: count,
-      warning: `Integrity Warning: This interview has recorded ${count} integrity events. At 5 events, the interview will be terminated.`,
-      status: 'in_progress',
-      sessionId: sessionId
-    });
+    const question = await selectNextAdaptiveQuestion({ session });
+    if (!question) return res.json({ completed: true, report: await finishSession(session), nextQuestion: null });
+    return res.json({ completed: false, nextQuestion: await toClientQuestion(question, session.currentQIndex) });
   } catch (err) {
-    console.error('Error logging integrity event:', err);
-    return res.status(500).json({ message: 'Error logging integrity event.' });
+    return res.status(500).json({ message: 'Could not select the next coding question.' });
   }
 });
 
-// 9. POST /api/interviews/session/finish - Complete interview and generate scores/report
 router.post(['/session/finish', '/:id/submit'], authMiddleware, async (req, res) => {
   try {
-    const { evaluateInterview } = require('../ai/interviewService');
-    const sessionId = req.body.sessionId || req.params.id;
-    const pySessionId = req.body.pySessionId || sessionId;
-
-    let pyReport = null;
-    try {
-      const response = await axios.post(`${AI_SERVICE_URL}/ml/interview/session/finish`, {
-        session_id: pySessionId
-      });
-      pyReport = response.data;
-    } catch (e) {}
-
-    let session = null;
-    if (sessionId) {
-      session = await InterviewSession.findById(sessionId);
-    }
-
-    // Build evidence-aware evaluation
-    const localEval = evaluateInterview({
-      questions: session ? session.questions : [],
-      antiCheatLogs: session ? session.antiCheatLogs : [],
-      performanceHistory: session ? session.performanceHistory : []
-    });
-
-    let baseReport = pyReport;
-    if (baseReport) {
-      if (baseReport.scores && baseReport.scores.sub_scores) {
-        baseReport.scores.sub_scores.communication = "Not Applicable";
-      }
-      baseReport.evidenceSummary = localEval.evidenceSummary;
-      baseReport.scoreStatus = localEval.scoreStatus;
-      baseReport.mlPrediction = localEval.mlPrediction;
-      if (localEval.overallScore === null && baseReport.scores) {
-        baseReport.scores.overall_score = null;
-        baseReport.scores.sub_scores.technical_knowledge = null;
-        baseReport.scores.sub_scores.problem_solving = null;
-        baseReport.scores.sub_scores.coding = null;
-      }
-    }
-
-    const finalReport = baseReport || {
-      scores: {
-        overall_score: localEval.overallScore,
-        sub_scores: {
-          technical_knowledge: localEval.technicalKnowledge,
-          problem_solving: localEval.problemSolving,
-          coding: localEval.codingScore,
-          communication: "Not Applicable",
-          behavioral: null
-        },
-        explanation: localEval.reason || (localEval.overallScore !== null ? `Evaluation score: ${localEval.overallScore}%` : 'No coding tasks or interview questions were attempted.')
-      },
-      proctoring_report: {
-        status: session && (session.status === 'terminated_integrity' || session.antiCheatLogs.length >= 5) ? "Integrity Threshold Reached" : "Normal",
-        summary: session && session.antiCheatLogs.length > 0 ? `${session.antiCheatLogs.length} proctoring signals recorded.` : "Session conducted cleanly.",
-        event_counts: { flags: session ? session.antiCheatLogs.length : 0 }
-      },
-      feedback: {
-        strengths: localEval.strengths,
-        weaknesses: localEval.weaknesses,
-        actionable_plan: localEval.recommendations
-      },
-      company_preparation_plan: {
-        target_company: session ? session.company : "NVIDIA",
-        target_role: session ? session.role : "Software Engineer Intern",
-        priority_topics: session ? (session.topicsAsked || ["arrays"]) : ["arrays"],
-        recommended_coding_problems: []
-      },
-      evidenceSummary: localEval.evidenceSummary,
-      scoreStatus: localEval.scoreStatus,
-      mlPrediction: localEval.mlPrediction
-    };
-
-    if (session) {
-      if (session.status !== 'terminated_integrity') {
-        session.status = 'completed';
-      }
-      session.evaluation = {
-        overallScore: localEval.overallScore,
-        problemSolving: localEval.problemSolving,
-        codingScore: localEval.codingScore,
-        communicationScore: 0,
-        strengths: localEval.strengths,
-        weaknesses: localEval.weaknesses
-      };
-      await session.save();
-    }
-
+    const session = await InterviewSession.findOne({ _id: req.body.sessionId || req.params.id, userId: req.user.id });
+    if (!session) return res.status(404).json({ message: 'Interview session not found.' });
+    const evaluation = await finishSession(session);
     return res.json({
-      status: session ? session.status : 'completed',
-      report: finalReport
+      status: session.status,
+      report: {
+        scores: {
+          overall_score: evaluation.overallScore,
+          sub_scores: {
+            coding: evaluation.codingScore,
+            problem_solving: evaluation.problemSolving,
+            complexity: evaluation.complexityAnalysisScore,
+            code_quality: evaluation.codeQualityScore,
+            communication: 'Not Applicable'
+          }
+        },
+        feedback: {
+          strengths: evaluation.strengths,
+          weaknesses: evaluation.weaknesses,
+          actionable_plan: evaluation.recommendations
+        },
+        evidenceSummary: evaluation.evidenceSummary,
+        mlPrediction: evaluation.mlPrediction
+      }
     });
+
   } catch (err) {
-    console.error('Error finishing interview session:', err);
     return res.status(500).json({ message: 'Error finishing session.' });
   }
 });
 
-// 10. GET /api/interviews/report/:sessionId - Fetch full report
-router.get(['/report/:sessionId', '/:id/result'], authMiddleware, async (req, res) => {
+
+router.post('/integrity-event', authMiddleware, async (req, res) => {
   try {
-    const { evaluateInterview } = require('../ai/interviewService');
-    const sessionId = req.params.sessionId || req.params.id;
-    const session = await InterviewSession.findById(sessionId);
+    const sessionId = req.body.sessionId || req.body.id;
+    const session = await InterviewSession.findOne({ _id: sessionId, userId: req.user.id });
+    if (!session) return res.status(404).json({ message: 'Interview session not found.' });
 
-    let pyReport = null;
-    try {
-      const response = await axios.post(`${AI_SERVICE_URL}/ml/interview/session/finish`, {
-        session_id: sessionId
-      });
-      pyReport = response.data;
-    } catch (e) {}
+    const eventType = req.body.eventType || 'unknown_event';
+    session.antiCheatLogs.push({ event: eventType, timestamp: new Date() });
 
-    const localEval = evaluateInterview({
-      questions: session ? session.questions : [],
-      antiCheatLogs: session ? session.antiCheatLogs : [],
-      performanceHistory: session ? session.performanceHistory : []
-    });
+    const count = session.antiCheatLogs.length;
+    let terminated = session.status === 'terminated_integrity';
 
-    let baseReport = pyReport;
-    if (baseReport) {
-      if (baseReport.scores && baseReport.scores.sub_scores) {
-        baseReport.scores.sub_scores.communication = "Not Applicable";
-      }
-      baseReport.evidenceSummary = localEval.evidenceSummary;
-      baseReport.scoreStatus = localEval.scoreStatus;
-      baseReport.mlPrediction = localEval.mlPrediction;
-      if (localEval.overallScore === null && baseReport.scores) {
-        baseReport.scores.overall_score = null;
-        baseReport.scores.sub_scores.technical_knowledge = null;
-        baseReport.scores.sub_scores.problem_solving = null;
-        baseReport.scores.sub_scores.coding = null;
-      }
+    if (count >= 5 && !terminated) {
+      session.status = 'terminated_integrity';
+      terminated = true;
+      await finishSession(session);
+    } else {
+      await session.save();
     }
 
-    const report = baseReport || {
-      scores: {
-        overall_score: localEval.overallScore,
-        sub_scores: {
-          technical_knowledge: localEval.technicalKnowledge,
-          problem_solving: localEval.problemSolving,
-          coding: localEval.codingScore,
-          communication: "Not Applicable",
-          behavioral: null
+    return res.json({
+      success: true,
+      integrityFlagCount: count,
+      terminated,
+      reason: terminated ? 'integrity_threshold_reached' : null,
+      status: session.status,
+      warning: count === 4 ? 'Integrity Warning: This interview has recorded 4 integrity events. At 5 events, the interview will be terminated.' : null
+    });
+  } catch (err) {
+    return res.status(500).json({ message: 'Error logging integrity event.' });
+  }
+});
+
+router.get(['/report/:id', '/session/:id/report'], authMiddleware, async (req, res) => {
+  try {
+    const session = await InterviewSession.findOne({ _id: req.params.id, userId: req.user.id });
+    if (!session) return res.status(404).json({ message: 'Interview session not found.' });
+    const evaluation = evaluateInterview({ questions: session.questions, performanceHistory: session.performanceHistory, mistakesDetected: session.mistakesDetected || [] });
+    return res.json({
+      sessionId: session._id,
+      status: session.status,
+      report: {
+        scores: {
+          overall_score: evaluation.overallScore,
+          sub_scores: {
+            coding: evaluation.codingScore,
+            problem_solving: evaluation.problemSolving,
+            complexity: evaluation.complexityAnalysisScore,
+            code_quality: evaluation.codeQualityScore,
+            communication: 'Not Applicable'
+          }
         },
-        explanation: localEval.reason || (localEval.overallScore !== null ? `Evaluation score: ${localEval.overallScore}%` : 'No coding tasks or interview questions were attempted.')
-      },
-      proctoring_report: {
-        status: session && (session.status === 'terminated_integrity' || session.antiCheatLogs.length >= 5) ? "Integrity Threshold Reached" : "Normal",
-        summary: session && session.antiCheatLogs.length > 0 ? `${session.antiCheatLogs.length} proctoring signals recorded.` : "Session conducted cleanly."
-      },
-      feedback: {
-        strengths: localEval.strengths,
-        weaknesses: localEval.weaknesses,
-        actionable_plan: localEval.recommendations
-      },
-      company_preparation_plan: {
-        target_company: session ? session.company : "NVIDIA",
-        target_role: session ? session.role : "Software Engineer Intern",
-        priority_topics: session ? (session.topicsAsked || ["arrays"]) : ["arrays"],
-        recommended_coding_problems: []
-      },
-      evidenceSummary: localEval.evidenceSummary,
-      scoreStatus: localEval.scoreStatus,
-      mlPrediction: localEval.mlPrediction
-    };
-
-    return res.json({
-      session,
-      report
+        feedback: {
+          strengths: evaluation.strengths,
+          weaknesses: evaluation.weaknesses,
+          actionable_plan: evaluation.recommendations
+        },
+        evidenceSummary: evaluation.evidenceSummary,
+        mlPrediction: evaluation.mlPrediction
+      }
     });
   } catch (err) {
-    console.error('Error fetching interview report:', err);
-    return res.status(500).json({ message: 'Error fetching report.' });
+    return res.status(500).json({ message: 'Error retrieving report.' });
   }
 });
 
-// 11. GET /api/interviews/history - Fetch past interviews
 router.get('/history', authMiddleware, async (req, res) => {
-  try {
-    const history = await InterviewSession.find({ userId: req.user.id })
-      .sort({ createdAt: -1 })
-      .limit(20);
-    return res.json({ history, count: history.length });
-  } catch (err) {
-    return res.status(500).json({ message: 'Error fetching history.' });
-  }
+  const history = await InterviewSession.find({ userId: req.user.id }).sort({ createdAt: -1 }).limit(20);
+  return res.json({ history, count: history.length });
 });
 
-// 12. GET /api/interviews/recommendations - Fetch personalized problem recommendations
-router.get('/recommendations', authMiddleware, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).populate('solvedProblems');
-    const problems = await Problem.find().limit(5).select('title slug difficulty topics');
-    return res.json({
-      recommendations: problems,
-      count: problems.length
-    });
-  } catch (err) {
-    return res.status(500).json({ message: 'Error fetching recommendations.' });
-  }
-});
+
 
 module.exports = router;

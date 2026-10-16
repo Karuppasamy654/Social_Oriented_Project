@@ -1,4 +1,5 @@
 import os
+import joblib
 from typing import Dict, Any, List, Optional
 
 class ModelRegistry:
@@ -12,11 +13,37 @@ class ModelRegistry:
         self.registry_status = "deterministic_rule_ranker_active"
         self.feature_vectorizer = None
         self.topic_classifier = None
+        self.skill_classifier = None
+        self.answer_classifier = None
         self.metadata = {
             "topic_classification": "TF-IDF + ML",
             "version": "v3.0.0",
             "status": "active"
         }
+        self._load_models()
+
+    def _load_models(self):
+        """Load trained .joblib model artifacts into registry at startup."""
+        _base = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'trained_models')
+        _model_files = {
+            'feature_vectorizer': 'feature_vectorizer.joblib',
+            'topic_classifier': 'topic_classifier.joblib',
+            'skill_classifier': 'skill_classifier.joblib',
+            'answer_classifier': 'answer_classifier.joblib',
+        }
+        for attr, fname in _model_files.items():
+            fpath = os.path.normpath(os.path.join(_base, fname))
+            if os.path.exists(fpath):
+                try:
+                    setattr(self, attr, joblib.load(fpath))
+                except Exception as e:
+                    print(f"[ModelRegistry] Could not load {fname}: {e}")
+        self.models_loaded = (
+            self.feature_vectorizer is not None and
+            self.topic_classifier is not None and
+            self.skill_classifier is not None
+        )
+        self.registry_status = "models_loaded" if self.models_loaded else "deterministic_rule_ranker_active"
 
 
     def predict_pattern(self, code_features: Dict[str, Any]) -> List[Dict[str, Any]]:

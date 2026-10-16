@@ -1,6 +1,6 @@
 import re
 import difflib
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 def tokenize_code(code: str) -> List[str]:
     """Extracts code tokens ignoring whitespace and comments."""

@@ -48,7 +48,15 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'All fields are required.' });
     }
 
-    const existing = await User.findOne({ $or: [{ email }, { username }] });
+    if (typeof email !== 'string' || !/^\S+@\S+\.\S+$/.test(email) ||
+        typeof username !== 'string' || !/^[a-zA-Z0-9_]{3,30}$/.test(username) ||
+        typeof password !== 'string' || password.length < 8 || password.length > 128 ||
+        typeof name !== 'string' || name.trim().length < 1 || name.trim().length > 100) {
+      return res.status(400).json({ message: 'Use a valid email, a 3–30 character username, and a password of at least 8 characters.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const existing = await User.findOne({ $or: [{ email: normalizedEmail }, { normalizedUsername: username.toLowerCase() }] });
     if (existing) {
       return res.status(400).json({ message: 'User with this email or username already exists.' });
     }
@@ -57,9 +65,9 @@ router.post('/register', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, salt);
 
     const user = await User.create({
-      name,
-      username,
-      email,
+      name: name.trim(),
+      username: username.trim(),
+      email: normalizedEmail,
       passwordHash,
       authProvider: 'local',
       isOnboarded: false
@@ -81,7 +89,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Email and password are required.' });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: String(email).trim().toLowerCase() });
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials.' });
     }
@@ -123,9 +131,6 @@ router.get('/me', authMiddleware, async (req, res) => {
     let user = await User.findById(req.user.id).select('-passwordHash');
     if (!user && req.user.email) {
       user = await User.findOne({ email: req.user.email }).select('-passwordHash');
-    }
-    if (!user) {
-      user = await User.findOne().select('-passwordHash');
     }
     if (!user) return res.status(404).json({ message: 'User not found.' });
     return res.json(user);
@@ -286,10 +291,11 @@ async function processOAuthCallback(provider, code, stateToken, req, res) {
 
     const linkPayload = { message: `${provider} account successfully linked!`, redirect: redirectTarget };
 
+    const clientOrigin = (process.env.CLIENT_ORIGIN || 'http://localhost:3000').split(',')[0].trim();
     // If HTTP GET browser redirect, use one-time ticket to avoid URL token exposure
     if (req.method === 'GET' && !req.headers.accept?.includes('application/json')) {
       const ticket = createExchangeTicket(linkPayload);
-      return res.redirect(`/auth/callback?ticket=${encodeURIComponent(ticket)}`);
+      return res.redirect(`${clientOrigin}/auth/callback?ticket=${encodeURIComponent(ticket)}`);
     }
 
     return res.json(linkPayload);
@@ -360,7 +366,8 @@ async function processOAuthCallback(provider, code, stateToken, req, res) {
   // If browser GET redirect, use short-lived one-time exchange ticket (never place raw JWT in URL!)
   if (req.method === 'GET' && !req.headers.accept?.includes('application/json')) {
     const ticket = createExchangeTicket(authResultPayload);
-    return res.redirect(`/auth/callback?ticket=${encodeURIComponent(ticket)}`);
+    const clientOrigin = (process.env.CLIENT_ORIGIN || 'http://localhost:3000').split(',')[0].trim();
+    return res.redirect(`${clientOrigin}/auth/callback?ticket=${encodeURIComponent(ticket)}`);
   }
 
   return res.json(authResultPayload);

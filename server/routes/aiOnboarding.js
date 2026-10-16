@@ -80,25 +80,33 @@ router.post('/analyze-experience', auth, async (req, res) => {
   }
 });
 
+const { selectNextAdaptiveQuestion, updateStudentState, generateFinalProfile } = require('../ai/adaptiveAssessmentEngine');
+
 // 2. Start Dynamic Adaptive Assessment Session (Returns ONLY Question 1)
 router.post('/assessment/start', auth, async (req, res) => {
   const { selfReportedLevel = 'Beginner', externalPlatformId = '', experienceText = '', selectedTopics = [] } = req.body;
   const userId = req.user?.id || req.user?._id;
   const validUserId = (userId && mongoose.Types.ObjectId.isValid(userId)) ? userId : new mongoose.Types.ObjectId();
 
+  const userTopicList = (Array.isArray(selectedTopics) && selectedTopics.length > 0)
+    ? selectedTopics.map(t => typeof t === 'string' ? t : t.name)
+    : ['Array', 'String', 'HashMap'];
+
+  const levelPriorMap = { 'Beginner': -0.8, 'Intermediate': 0.0, 'Expert': 0.8, 'Advanced': 0.8 };
+  const initialTheta = levelPriorMap[selfReportedLevel] || 0.0;
+
   try {
-    // Call Python FastAPI ML Service to initialize session & select Question 1
+    // Attempt Python FastAPI service first
     const resp = await axios.post(`${PYTHON_SERVICE_URL}/api/ai/onboarding/assessment/start`, {
       userId: validUserId.toString(),
       experienceText: experienceText || '',
       selfReportedLevel,
-      selectedTopics
-    }, { timeout: 5000 });
+      selectedTopics: userTopicList
+    }, { timeout: 3000 });
 
     const sessionData = resp.data;
     const sid = sessionData.sessionId;
 
-    // Persist initial AssessmentSession in MongoDB
     try {
       const newSession = new AssessmentSession({
         sessionId: sid,
@@ -109,7 +117,7 @@ router.post('/assessment/start', auth, async (req, res) => {
         mlExtractedLevel: sessionData.initialEstimate?.initial_level || selfReportedLevel,
         matchStatus: sessionData.matchStatus || 'MATCHED',
         matchScore: Math.round((sessionData.initialEstimate?.confidence || 0.85) * 100),
-        detectedTopics: safeFormattedTopics(sessionData.detectedTopics || selectedTopics),
+        detectedTopics: safeFormattedTopics(userTopicList),
         initialLevel: selfReportedLevel,
         status: 'IN_PROGRESS',
         currentQuestionIndex: 0,
@@ -117,43 +125,33 @@ router.post('/assessment/start', auth, async (req, res) => {
         questions: sessionData.currentQuestion ? [sessionData.currentQuestion] : []
       });
       await newSession.save();
-
-      await User.findByIdAndUpdate(validUserId, {
-        assessmentSessionId: sid,
-        selfReportedLevel,
-        externalPlatformId: externalPlatformId || ''
-      }).catch(e => console.warn('Non-fatal User update error:', e.message));
     } catch (dbErr) {
       console.warn('MongoDB session save warning:', dbErr.message);
     }
 
     return res.json(sessionData);
   } catch (err) {
-    console.warn('Start assessment Python service warning (using fallback):', err?.response?.data || err.message);
+    console.warn('Start assessment Python service warning (using Node Adaptive Engine fallback):', err?.response?.data || err.message);
 
     const sid = 'session_' + Math.random().toString(36).substring(2, 14);
-    const fallbackQuestion = {
-      id: 'q_fallback_1',
-      topic: Array.isArray(selectedTopics) && selectedTopics[0] ? (typeof selectedTopics[0] === 'string' ? selectedTopics[0] : selectedTopics[0].name) : 'Array',
-      difficulty: selfReportedLevel || 'Intermediate',
-      title: 'Two Sum Problem Analysis',
-      problemStatement: 'Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.',
-      options: [
-        'A) Hash Table with O(N) time complexity',
-        'B) Sorting and Two Pointers with O(N log N) time complexity',
-        'C) Nested Loops with O(N^2) time complexity',
-        'D) Binary Search Tree with O(N log N) time complexity'
-      ]
-    };
+
+    // Filter strictly from user experienced topics and ensure no duplicates
+    const { question: firstQ, reasoning } = selectNextAdaptiveQuestion({
+      selectedTopics: userTopicList,
+      askedQuestionIds: [],
+      askedTitles: [],
+      currentTheta: initialTheta,
+      currentQuestionIndex: 0
+    });
 
     const sessionData = {
       sessionId: sid,
       status: 'IN_PROGRESS',
       currentQuestionIndex: 0,
       totalQuestions: 12,
-      currentQuestion: fallbackQuestion,
-      adaptationExplanation: ['Adaptive session initialized.'],
-      initialEstimate: { initial_level: selfReportedLevel, confidence: 0.80 }
+      currentQuestion: firstQ,
+      adaptationExplanation: reasoning,
+      initialEstimate: { initial_level: selfReportedLevel, confidence: 0.85 }
     };
 
     try {
@@ -166,12 +164,12 @@ router.post('/assessment/start', auth, async (req, res) => {
         mlExtractedLevel: selfReportedLevel,
         matchStatus: 'MATCHED',
         matchScore: 85,
-        detectedTopics: safeFormattedTopics(selectedTopics),
+        detectedTopics: safeFormattedTopics(userTopicList),
         initialLevel: selfReportedLevel,
         status: 'IN_PROGRESS',
         currentQuestionIndex: 0,
         totalQuestions: 12,
-        questions: [fallbackQuestion]
+        questions: [firstQ]
       });
       await newSession.save();
 
@@ -192,10 +190,9 @@ router.post('/assessment/start', auth, async (req, res) => {
 router.get('/assessment/:sessionId', auth, async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const resp = await axios.get(`${PYTHON_SERVICE_URL}/api/ai/onboarding/assessment/${sessionId}`, { timeout: 3000 });
+    const resp = await axios.get(`${PYTHON_SERVICE_URL}/api/ai/onboarding/assessment/${sessionId}`, { timeout: 2000 });
     return res.json(resp.data);
   } catch (err) {
-    // Fallback to MongoDB session if Python session expired or service unavailable
     try {
       const dbSession = await AssessmentSession.findOne({ sessionId: req.params.sessionId });
       if (!dbSession) return res.status(404).json({ message: 'Session not found' });
@@ -213,15 +210,13 @@ router.post('/assessment/:sessionId/answer', auth, async (req, res) => {
   const userId = req.user?.id || req.user?._id;
 
   try {
-    // Submit answer to Python ML engine for adaptive evaluation & next question ranking
     const resp = await axios.post(`${PYTHON_SERVICE_URL}/api/ai/onboarding/assessment/${sessionId}/answer`, {
       questionId,
       userAnswer
-    }, { timeout: 5000 });
+    }, { timeout: 3000 });
 
     const pyResult = resp.data;
 
-    // Update MongoDB AssessmentSession record
     try {
       const dbSession = await AssessmentSession.findOne({ sessionId });
       if (dbSession) {
@@ -257,22 +252,46 @@ router.post('/assessment/:sessionId/answer', auth, async (req, res) => {
 
     return res.json(pyResult);
   } catch (err) {
-    console.warn('Submit answer Python service warning (using fallback):', err?.response?.data || err.message);
+    console.warn('Submit answer Python service warning (using Node Adaptive Engine fallback):', err?.response?.data || err.message);
 
     try {
       const dbSession = await AssessmentSession.findOne({ sessionId });
       if (dbSession) {
+        const rawTopics = dbSession.detectedTopics || [];
+        const userTopicList = rawTopics.map(t => typeof t === 'object' ? t.name : t);
+
+        const currentQIndex = dbSession.currentQuestionIndex || 0;
+        const currentQ = dbSession.questions[currentQIndex] || dbSession.questions[dbSession.questions.length - 1];
+
+        // Evaluate answer and update IRT theta
+        const currentTheta = dbSession.currentTheta || 0.0;
+        const evalState = updateStudentState({
+          currentTheta,
+          question: currentQ,
+          userAnswer
+        });
+
+        dbSession.currentTheta = evalState.newTheta;
+        dbSession.answers.push({
+          questionId: questionId || currentQ?.id,
+          topic: currentQ?.topic || 'Array',
+          difficulty: currentQ?.difficulty || 'Intermediate',
+          userAnswer,
+          isCorrect: evalState.isCorrect,
+          evalResult: evalState
+        });
+
         dbSession.currentQuestionIndex += 1;
+
         if (dbSession.currentQuestionIndex >= dbSession.totalQuestions) {
           dbSession.status = 'COMPLETED';
-          const finalProfile = {
+          const finalProfile = generateFinalProfile({
             selfReportedLevel: dbSession.selfReportedLevel,
-            verifiedLevel: dbSession.selfReportedLevel || 'Intermediate',
-            overall_skill: { score: 85, confidence: 85 },
-            explanation: { summary: 'Completed adaptive skill assessment.' },
-            strengths: (dbSession.detectedTopics || []).map(t => typeof t === 'object' ? t.name : t).slice(0, 3),
-            weaknesses: []
-          };
+            answers: dbSession.answers,
+            finalTheta: evalState.newTheta,
+            selectedTopics: userTopicList
+          });
+
           dbSession.finalProfile = finalProfile;
           dbSession.completedAt = new Date();
 
@@ -281,7 +300,7 @@ router.post('/assessment/:sessionId/answer', auth, async (req, res) => {
               onboardingCompleted: true,
               isOnboarded: true,
               verifiedLevel: finalProfile.verifiedLevel,
-              confidenceScore: 85,
+              confidenceScore: finalProfile.overall_skill?.confidence || 85,
               currentSkillProfile: finalProfile,
               assessmentCompletedAt: new Date()
             }).catch(e => console.warn('Non-fatal User update error:', e.message));
@@ -290,23 +309,17 @@ router.post('/assessment/:sessionId/answer', auth, async (req, res) => {
           await dbSession.save();
           return res.json({ status: 'COMPLETED', finalProfile, currentQuestionIndex: dbSession.totalQuestions });
         } else {
-          const rawTopics = dbSession.detectedTopics || [];
-          const topics = rawTopics.map(t => typeof t === 'object' ? t.name : t);
-          if (!topics.length) topics.push('Array');
-          const topicName = topics[dbSession.currentQuestionIndex % topics.length] || 'Array';
-          const nextQ = {
-            id: `q_fallback_${dbSession.currentQuestionIndex + 1}`,
-            topic: topicName,
-            difficulty: dbSession.selfReportedLevel || 'Intermediate',
-            title: `Adaptive Skill Check Question ${dbSession.currentQuestionIndex + 1}`,
-            problemStatement: `Analyze algorithmic complexity for problem #${dbSession.currentQuestionIndex + 1}.`,
-            options: [
-              'A) Optimal O(N) time complexity',
-              'B) O(N log N) sorting time complexity',
-              'C) O(N^2) quadratic nested loop complexity',
-              'D) O(1) constant auxiliary space'
-            ]
-          };
+          // Select next question strictly from user topics, avoiding repeats
+          const askedQuestionIds = dbSession.questions.map(q => q.id).filter(Boolean);
+          const askedTitles = dbSession.questions.map(q => q.title).filter(Boolean);
+
+          const { question: nextQ, reasoning } = selectNextAdaptiveQuestion({
+            selectedTopics: userTopicList,
+            askedQuestionIds,
+            askedTitles,
+            currentTheta: evalState.newTheta,
+            currentQuestionIndex: dbSession.currentQuestionIndex
+          });
 
           dbSession.questions.push(nextQ);
           await dbSession.save();
@@ -316,7 +329,7 @@ router.post('/assessment/:sessionId/answer', auth, async (req, res) => {
             currentQuestionIndex: dbSession.currentQuestionIndex,
             totalQuestions: dbSession.totalQuestions,
             currentQuestion: nextQ,
-            adaptationExplanation: ['Adapted next question difficulty based on response.']
+            adaptationExplanation: reasoning
           });
         }
       }
@@ -329,4 +342,5 @@ router.post('/assessment/:sessionId/answer', auth, async (req, res) => {
 });
 
 module.exports = router;
+
 

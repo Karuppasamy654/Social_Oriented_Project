@@ -221,8 +221,11 @@ async function seedInitialData() {
       }
     }
 
-    const testUser = await User.findOne({ email: 'test@codebuddy.dev' });
-    if (!testUser) {
+    // Development fixtures must never be created in a real environment.
+    const testUser = process.env.NODE_ENV === 'test'
+      ? await User.findOne({ email: 'test@codebuddy.dev' })
+      : null;
+    if (process.env.NODE_ENV === 'test' && !testUser) {
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash('Password123!', salt);
       await User.create({

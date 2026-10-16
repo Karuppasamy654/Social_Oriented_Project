@@ -13,7 +13,7 @@ if (apiKey && apiKey !== 'your_gemini_api_key_here') {
 async function analyzeSubmittedCode({ problemTitle, problemDescription, language, sourceCode, status, runtimeMs, memoryKb, previousMistakes = [] }) {
   if (genAI) {
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash-lite' });
       const prompt = `
 You are an expert AI Code Reviewer for the CodeBuddy platform.
 Analyze this submitted solution:

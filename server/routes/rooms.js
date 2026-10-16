@@ -235,6 +235,13 @@ router.post('/:roomId/join-request', authMiddleware, async (req, res) => {
     if (!room) return res.status(404).json({ error: 'Study room not found' });
     if (room.status !== 'active') return res.status(400).json({ error: 'Study room is no longer active' });
 
+    // Block creator from requesting their own room
+    const creatorIdStr = (room.creatorId._id || room.creatorId).toString();
+    const userIdStr = userId.toString();
+    if (creatorIdStr === userIdStr) {
+      return res.status(400).json({ error: 'Creator cannot send a join request to their own room' });
+    }
+
     // Check capacity
     const activeCount = await StudyRoomMember.countDocuments({ roomId: room._id, status: 'active' });
     if (activeCount >= room.maxParticipants) {
@@ -242,15 +249,23 @@ router.post('/:roomId/join-request', authMiddleware, async (req, res) => {
     }
 
     // Check existing active membership
-    const existingMember = await StudyRoomMember.findOne({ roomId: room._id, userId, status: 'active' });
+    const existingMember = await StudyRoomMember.findOne({
+      roomId: room._id,
+      userId: { $in: [userId, userIdStr] },
+      status: 'active'
+    });
     if (existingMember) {
-      return res.json({ message: 'Already an active member of this room', isMember: true });
+      return res.status(409).json({ error: 'Already an active member of this room', isMember: true });
     }
 
     // Check pending request
-    const existingReq = await StudyRoomJoinRequest.findOne({ roomId: room._id, requesterId: userId, status: 'pending' });
+    const existingReq = await StudyRoomJoinRequest.findOne({
+      roomId: room._id,
+      requesterId: { $in: [userId, userIdStr] },
+      status: 'pending'
+    });
     if (existingReq) {
-      return res.json({ message: 'Join request is already pending', request: existingReq });
+      return res.status(409).json({ error: 'Join request is already pending', request: existingReq });
     }
 
     const joinRequest = await StudyRoomJoinRequest.create({
@@ -263,12 +278,30 @@ router.post('/:roomId/join-request', authMiddleware, async (req, res) => {
       .populate('requesterId', 'username displayName avatar college skills')
       .lean();
 
+    console.log(`[COLLAB] Join request created - Room: ${room._id}, Requester: ${userId}, Creator: ${room.creatorId}`);
+
+    // Broadcast real-time notification to room creator and room socket channels
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        console.log(`[COLLAB] Emitting room:join-request to room ${room._id} and creator user:${room.creatorId}`);
+        io.in(room._id.toString()).emit('room:join-request', populatedReq);
+        io.to(`user:${room.creatorId.toString()}`).emit('room:join-request', populatedReq);
+      }
+    } catch (sErr) {
+      console.error('[COLLAB] Error emitting join request socket event:', sErr);
+    }
+
     return res.status(201).json({ message: 'Join request submitted successfully', request: populatedReq });
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(409).json({ error: 'Join request is already pending' });
+    }
     console.error('Error submitting join request:', err);
     return res.status(500).json({ error: 'Failed to submit join request' });
   }
 });
+
 
 // ------------------------------------------------------------------
 // 5. GET /api/rooms/:roomId/join-requests — Get Pending Join Requests (Creator Only)
@@ -284,7 +317,8 @@ router.get('/:roomId/join-requests', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Only the room creator can view join requests' });
     }
 
-    const requests = await StudyRoomJoinRequest.find({ roomId: room._id, status: 'pending' })
+    const statusFilter = req.query.status || 'pending';
+    const requests = await StudyRoomJoinRequest.find({ roomId: room._id, status: statusFilter })
       .populate('requesterId', 'username displayName avatar college skills')
       .sort({ requestedAt: -1 })
       .lean();
@@ -328,10 +362,32 @@ router.post('/:roomId/join-requests/:requestId/approve', authMiddleware, async (
 
     // Upsert Active Member Record
     const member = await StudyRoomMember.findOneAndUpdate(
-      { roomId: room._id, userId: joinReq.requesterId },
+      { roomId: room._id, userId: toObjectId(joinReq.requesterId) },
       { role: 'participant', status: 'active', joinedAt: new Date(), lastSeenAt: new Date() },
       { upsert: true, new: true }
     ).populate('userId', 'username displayName avatar');
+
+    console.log(`[COLLAB] Approval completed - Room: ${room._id}, Requester: ${joinReq.requesterId}`);
+
+    // Emit Realtime Approval Socket Events
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        const payload = {
+          requestId,
+          roomId: room._id.toString(),
+          requesterId: joinReq.requesterId.toString(),
+          member,
+          status: 'approved'
+        };
+        console.log(`[COLLAB] Emitting room:join-approved to room ${room._id} and user:${joinReq.requesterId}`);
+        io.in(room._id.toString()).emit('room:join-approved', payload);
+        io.to(`user:${joinReq.requesterId.toString()}`).emit('room:join-approved', payload);
+        io.in(room._id.toString()).emit('room:member-added', { roomId: room._id.toString(), member });
+      }
+    } catch (sErr) {
+      console.error('[COLLAB] Error emitting approval socket event:', sErr);
+    }
 
     return res.json({ message: 'Join request approved', member, request: joinReq });
   } catch (err) {
@@ -363,6 +419,26 @@ router.post('/:roomId/join-requests/:requestId/reject', authMiddleware, async (r
     joinReq.respondedAt = new Date();
     joinReq.respondedBy = toObjectId(userId);
     await joinReq.save();
+
+    console.log(`[COLLAB] Request rejected - Room: ${room._id}, Requester: ${joinReq.requesterId}`);
+
+    // Emit Realtime Rejection Socket Events
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        const payload = {
+          requestId,
+          roomId: room._id.toString(),
+          requesterId: joinReq.requesterId.toString(),
+          status: 'rejected'
+        };
+        console.log(`[COLLAB] Emitting room:join-rejected to room ${room._id} and user:${joinReq.requesterId}`);
+        io.in(room._id.toString()).emit('room:join-rejected', payload);
+        io.to(`user:${joinReq.requesterId.toString()}`).emit('room:join-rejected', payload);
+      }
+    } catch (sErr) {
+      console.error('[COLLAB] Error emitting rejection socket event:', sErr);
+    }
 
     return res.json({ message: 'Join request rejected', request: joinReq });
   } catch (err) {

@@ -3,7 +3,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const { connectDB } = require('./config/db');
-const { securityMiddleware, apiLimiter } = require('./middleware/security');
+const { securityMiddleware, apiLimiter, allowedOrigins } = require('./middleware/security');
 
 const authRoutes = require('./routes/auth');
 const usersRoutes = require('./routes/users');
@@ -24,8 +24,9 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 
@@ -36,6 +37,8 @@ app.use('/api/', apiLimiter);
 
 // Setup WebSockets
 setupSocketIO(io);
+app.set('io', io);
+
 
 const aiOnboardingRoutes = require('./routes/aiOnboarding');
 
@@ -84,6 +87,9 @@ app.get('/api/health', (req, res) => {
 let currentPort = Number(process.env.PORT) || 5000;
 
 async function startServer() {
+  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is required in production.');
+  }
   await connectDB();
   await seedInitialData();
 

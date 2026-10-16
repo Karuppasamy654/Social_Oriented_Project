@@ -2,12 +2,34 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 
+const configuredOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:3000')
+  .split(',').map(origin => origin.trim()).filter(Boolean);
+// Browsers treat localhost and 127.0.0.1 as different origins. Permit both
+// only for local development/test; production stays limited to CLIENT_ORIGIN.
+const localOrigins = process.env.NODE_ENV === 'production'
+  ? []
+  : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+const allowedOrigins = [...new Set([...configuredOrigins, ...localOrigins])];
+
+function originIsAllowed(origin) {
+  if (!origin) return true;
+  if (process.env.NODE_ENV !== 'production') {
+    // Permit any local development origin (localhost or 127.0.0.1 on any port)
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
+  }
+  return allowedOrigins.includes(origin);
+}
+
 const securityMiddleware = [
   helmet({
-    contentSecurityPolicy: false // Allow inline scripts for Monaco Editor & dev mode
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginOpenerPolicy: false
   }),
   cors({
-    origin: '*',
+    origin(origin, callback) {
+      callback(null, originIsAllowed(origin));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
   })
@@ -25,5 +47,5 @@ const oauthLimiter = rateLimit({
   message: { error: 'Too many OAuth requests from this IP, please try again after 15 minutes.' }
 });
 
-module.exports = { securityMiddleware, apiLimiter, oauthLimiter };
+module.exports = { securityMiddleware, apiLimiter, oauthLimiter, allowedOrigins, originIsAllowed };
 

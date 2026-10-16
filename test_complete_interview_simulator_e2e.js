@@ -16,8 +16,16 @@ async function runIntegrityThresholdE2ETests() {
       token = authRes.data.token;
       console.log('✅ Authenticated test user successfully.');
     } catch (e) {
-      console.log('⚠️ Authentication fallback active.');
+      const regRes = await axios.post(`${BASE_URL}/auth/register`, {
+        name: 'Test User',
+        username: 'testuser' + Date.now(),
+        email: 'test' + Date.now() + '@codebuddy.dev',
+        password: 'Password123!'
+      });
+      token = regRes.data.token;
+      console.log('✅ Registered and authenticated test user successfully.');
     }
+
 
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
@@ -70,14 +78,20 @@ async function runIntegrityThresholdE2ETests() {
     console.assert(nextAfterTerm.data.completed === true || nextAfterTerm.data.terminated === true, 'Test 4 Failed: Next question after termination must return completed/terminated');
     console.log(`✅ TEST 4 PASSED: Attempting /question/next after termination was rejected cleanly.`);
 
-    // TEST 5: Attempt /answer after termination -> Rejection without crash
-    const ansAfterTerm = await axios.post(`${BASE_URL}/interviews/answer`, {
-      sessionId: session.sessionId,
-      pySessionId: session.pySessionId,
-      transcript: 'Attempting to answer after termination...'
-    }, { headers });
-    console.assert(ansAfterTerm.data.terminated === true || ansAfterTerm.data.success === false, 'Test 5 Failed: Answer after termination must be rejected');
+    let ansAfterTermData = null;
+    try {
+      const res = await axios.post(`${BASE_URL}/interviews/answer`, {
+        sessionId: session.sessionId,
+        pySessionId: session.pySessionId,
+        transcript: 'Attempting to answer after termination...'
+      }, { headers });
+      ansAfterTermData = res.data;
+    } catch (err) {
+      ansAfterTermData = err.response ? err.response.data : {};
+    }
+    console.assert(ansAfterTermData.terminated === true || ansAfterTermData.success === false, 'Test 5 Failed: Answer after termination must be rejected');
     console.log(`✅ TEST 5 PASSED: Attempting /answer after termination was rejected cleanly.`);
+
 
     // TEST 6: Duplicate 5th-event request -> Idempotent response
     const dupEv = await axios.post(`${BASE_URL}/interviews/integrity-event`, {

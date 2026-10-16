@@ -16,7 +16,7 @@ export default function InterviewPage() {
   const [selectedRole, setSelectedRole] = useState('Software Engineer Intern');
   const [interviewType, setInterviewType] = useState('Technical');
   const [targetLevel, setTargetLevel] = useState('intern');
-  const [durationMinutes, setDurationMinutes] = useState(45);
+  const [durationMinutes, setDurationMinutes] = useState(15);
 
   const [showPrecheck, setShowPrecheck] = useState(false);
   const [session, setSession] = useState(null);
@@ -77,7 +77,7 @@ export default function InterviewPage() {
   };
 
   const handleAnswerSubmit = async (answerPayload) => {
-    if (!session) return;
+    if (!session) return null;
     setSubmittingAnswer(true);
 
     try {
@@ -86,16 +86,22 @@ export default function InterviewPage() {
         pySessionId: session.pySessionId,
         transcript: answerPayload.transcript,
         durationSeconds: answerPayload.durationSeconds,
-        userCode: answerPayload.userCode
+        userCode: answerPayload.userCode,
+        language: answerPayload.language,
+        runOnly: answerPayload.runOnly
       });
       if (res.data.terminated) {
         handleFinishSession();
-        return;
+        return res.data;
       }
-      // Proceed to next question automatically if evaluation succeeded
-      handleNextQuestion();
+      // If user clicked Submit (not just Run), automatically prompt for next question or report when ready
+      if (!answerPayload.runOnly && res.data.completed) {
+        handleFinishSession();
+      }
+      return res.data;
     } catch (err) {
       console.error('Answer submission error:', err);
+      return null;
     } finally {
       setSubmittingAnswer(false);
     }
@@ -217,10 +223,9 @@ export default function InterviewPage() {
                 onChange={(e) => setInterviewType(e.target.value)}
                 className="w-full bg-surface-secondary border border-surface-border rounded-xl px-4 py-3 text-white"
               >
+                <option value="Coding">Company Coding Round (Judge0 Monitored C++/JS/Py)</option>
                 <option value="Technical">Technical Interview (DSA, Systems, CS)</option>
-                <option value="HR / Behavioral">HR / Behavioral Interview (STAR)</option>
                 <option value="Mixed">Mixed Full-Loop Interview</option>
-                <option value="Coding">Coding Round (Judge0 Monitored C++)</option>
               </select>
             </div>
 
@@ -241,8 +246,8 @@ export default function InterviewPage() {
             {/* Duration */}
             <div className="sm:col-span-2">
               <label className="block text-gray-300 font-bold mb-1.5">Session Target Duration</label>
-              <div className="grid grid-cols-4 gap-3">
-                {[15, 30, 45, 60].map(mins => (
+              <div className="grid grid-cols-2 gap-3">
+                {[15, 30].map(mins => (
                   <button
                     type="button"
                     key={mins}
@@ -253,7 +258,7 @@ export default function InterviewPage() {
                         : 'bg-surface-secondary border-surface-border text-gray-400 hover:text-white'
                     }`}
                   >
-                    {mins} Mins
+                    {mins} Mins ({mins === 15 ? '2 Qs' : '3 Qs'})
                   </button>
                 ))}
               </div>

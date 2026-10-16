@@ -120,3 +120,21 @@ class NativeSkillClassifier:
     def predict(self, X):
         probs = self.predict_proba(X)
         return [p.index(max(p)) for p in probs]
+
+class NativeAnswerClassifier:
+    """
+    Native answer performance classifier.
+    Predicts probability of a correct answer based on feature vector:
+      [difficulty_score, ability, mastery, time_norm, hints]
+    """
+    def predict_proba(self, X):
+        res = []
+        for row in X:
+            diff, ability, mastery, time_norm, hints = row[0], row[1], row[2], row[3], row[4]
+            prob = max(0.05, min(0.95, (ability * 0.4) + (mastery * 0.4) - (diff * 0.15) - (hints * 0.1)))
+            res.append([round(1.0 - prob, 4), round(prob, 4)])
+        return res
+
+    def predict(self, X):
+        probs = self.predict_proba(X)
+        return [1 if p[1] >= 0.5 else 0 for p in probs]

@@ -44,13 +44,10 @@ export const AuthProvider = ({ children }) => {
     return res.data;
   };
 
-  const initiateOAuth = async (provider, action = 'login', redirect = '/dashboard') => {
-    const endpoint = `/auth/${provider}?format=json&action=${action}&redirect=${encodeURIComponent(redirect)}`;
-    const res = await api.get(endpoint);
-    if (res.data?.url) {
-      window.location.href = res.data.url;
-    }
-    return res.data;
+  const initiateOAuth = (provider, action = 'login', redirect = '/dashboard') => {
+    const apiBase = import.meta.env.VITE_API_BASE_URL || 
+      (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
+    window.location.href = `${apiBase}/auth/${provider}?action=${action}&redirect=${encodeURIComponent(redirect)}`;
   };
 
   const handleOAuthCallback = async (provider, code, state) => {

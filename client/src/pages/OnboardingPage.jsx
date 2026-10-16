@@ -478,6 +478,7 @@ export default function OnboardingPage() {
                 <div className="space-y-3">
                   {displayOptions.map((opt, oIdx) => {
                     const isSelected = selectedOption === opt;
+                    const cleanOpt = String(opt).replace(/^[A-D]\)\s*/i, '');
                     return (
                       <div
                         key={oIdx}
@@ -492,7 +493,7 @@ export default function OnboardingPage() {
                           <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${isSelected ? 'bg-pink-500 text-white' : 'bg-surface border border-surface-border text-gray-400'}`}>
                             {String.fromCharCode(65 + oIdx)}
                           </span>
-                          <span>{opt}</span>
+                          <span>{cleanOpt}</span>
                         </div>
                         {isSelected && <CheckCircle2 className="w-5 h-5 text-pink-400" />}
                       </div>

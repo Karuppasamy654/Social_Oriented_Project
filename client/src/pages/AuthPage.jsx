@@ -7,7 +7,7 @@ export default function AuthPage({ isRegister = false }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, register, loginOAuthMock, user } = useAuth();
+  const { login, register, initiateOAuth, user } = useAuth();
 
   const [isSignUp, setIsSignUp] = useState(isRegister || location.pathname === '/register' || searchParams.get('signup') === 'true');
   const [name, setName] = useState('');
@@ -38,19 +38,26 @@ export default function AuthPage({ isRegister = false }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
+    // Client-side validation before hitting the server
+    if (isSignUp) {
+      if (!name.trim()) return setError('Full name is required.');
+      if (!/^[a-zA-Z0-9_]{3,30}$/.test(username))
+        return setError('Username must be 3–30 characters (letters, numbers, underscores only).');
+      if (!/^\S+@\S+\.\S+$/.test(email)) return setError('Please enter a valid email address.');
+      if (password.length < 8) return setError('Password must be at least 8 characters.');
+      if (password !== confirmPassword) return setError('Passwords do not match.');
+    } else {
+      if (!email || !password) return setError('Email and password are required.');
+    }
+
+    setLoading(true);
     try {
       if (isSignUp) {
-        if (password !== confirmPassword) {
-          setError('Passwords do not match.');
-          setLoading(false);
-          return;
-        }
-        await register(name, username, email, password);
+        await register(name.trim(), username.trim(), email.trim().toLowerCase(), password);
         navigate('/onboarding/experience');
       } else {
-        const res = await login(email, password);
+        const res = await login(email.trim().toLowerCase(), password);
         if (!res.user.onboardingCompleted && !res.user.isOnboarded) {
           navigate('/onboarding/experience');
         } else {
@@ -58,19 +65,19 @@ export default function AuthPage({ isRegister = false }) {
         }
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Authentication failed. Please check credentials.');
+      setError(err.response?.data?.message || 'Authentication failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOAuth = async (provider) => {
+  const handleOAuth = (provider) => {
     setError('');
     setOauthLoading(provider);
     try {
-      await initiateOAuth(provider, 'login', '/dashboard');
+      initiateOAuth(provider, 'login', '/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || `Failed to connect to ${provider === 'google' ? 'Google' : 'GitHub'}.`);
+      setError(`Failed to connect to ${provider === 'google' ? 'Google' : 'GitHub'}. Please try again.`);
       setOauthLoading(null);
     }
   };

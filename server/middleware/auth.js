@@ -1,6 +1,10 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'codebuddy_super_secret_jwt_key_2026';
+// A predictable signing key would let an attacker mint sessions.  Development may
+// use an explicit local key, but production must always provide a secret.
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV !== 'production'
+  ? 'development-only-change-me'
+  : null);
 
 const User = require('../models/User');
 
@@ -20,12 +24,10 @@ async function authMiddleware(req, res, next) {
       user = await User.findOne({ email: decoded.email });
     }
     if (!user) {
-      user = await User.findOne();
+      return res.status(401).json({ message: 'Session user no longer exists.' });
     }
-    if (user) {
-      req.user.id = user._id.toString();
-      req.user._id = user._id;
-    }
+    req.user.id = user._id.toString();
+    req.user._id = user._id;
 
     next();
   } catch (err) {

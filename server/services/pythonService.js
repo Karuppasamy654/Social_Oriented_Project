@@ -62,13 +62,7 @@ async function analyzeCodeStatic(code, language = 'python') {
     const response = await pythonClient.post('/ml/analyze-code', { code, language });
     return response.data;
   } catch (err) {
-    return {
-      estimated_time_complexity: 'O(N)',
-      estimated_space_complexity: 'O(1)',
-      loop_count: 1,
-      has_recursion: false,
-      potential_anti_patterns: []
-    };
+    throw new Error('Code analysis service is unavailable.');
   }
 }
 
@@ -96,15 +90,7 @@ async function generateUnderstandingQuestions(userCode, problemTitle, language =
     });
     return response.data;
   } catch (err) {
-    return [
-      {
-        id: 'fallback_q1',
-        question: `What is the key time complexity invariant in your '${problemTitle}' solution?`,
-        options: ['O(N) linear iteration', 'O(1) constant time', 'O(N^2) quadratic nested loop', 'O(2^N) exponential recursion'],
-        correct_option_index: 0,
-        explanation: 'Linear traversal yields O(N) runtime.'
-      }
-    ];
+    throw new Error('Understanding-question service is unavailable.');
   }
 }
 

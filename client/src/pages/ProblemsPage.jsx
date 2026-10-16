@@ -258,10 +258,17 @@ function ProblemCard({ problem, recommendationReason, recommendationScore }) {
   const isMedium = problem.difficulty === 'Medium';
   const status = problem.status || 'Not Attempted';
 
+  const problemNum = problem.numericId || (problem.externalId ? parseInt(problem.externalId, 10) : null);
+  const displayTitle = problemNum ? `#${problemNum}. ${problem.title}` : problem.title;
+
   return (
     <Link
       to={`/problems/${problem.slug}`}
-      className="group p-6 rounded-2xl bg-surface border border-surface-border hover:border-accent-blue/50 transition-all hover:-translate-y-1 shadow-xl flex flex-col justify-between"
+      className={`group p-6 rounded-2xl border transition-all hover:-translate-y-1 shadow-xl flex flex-col justify-between ${
+        status === 'Solved'
+          ? 'bg-surface/50 border-emerald-500/30 hover:border-emerald-500/60'
+          : 'bg-surface border-surface-border hover:border-accent-blue/50'
+      }`}
     >
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -272,9 +279,9 @@ function ProblemCard({ problem, recommendationReason, recommendationScore }) {
               {problem.difficulty}
             </span>
             {status === 'Solved' && (
-              <span className="flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+              <span className="flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                 <CheckCircle2 className="w-3 h-3" />
-                <span>Solved</span>
+                <span>Solved (At Back)</span>
               </span>
             )}
             {status === 'Attempted' && (
@@ -292,7 +299,7 @@ function ProblemCard({ problem, recommendationReason, recommendationScore }) {
         </div>
 
         <h3 className="text-base font-bold text-white group-hover:text-accent-blue transition-colors mb-2">
-          {problem.title}
+          {displayTitle}
         </h3>
 
         <div className="flex flex-wrap gap-1.5 mb-4">
@@ -307,7 +314,7 @@ function ProblemCard({ problem, recommendationReason, recommendationScore }) {
       {/* Footer / Reason */}
       <div className="mt-4 pt-3 border-t border-surface-border/50 flex items-center justify-between text-xs">
         <span className="text-[11px] text-gray-400 truncate max-w-[80%]">
-          {recommendationReason || (problem.externalId ? `LeetCode #${problem.externalId}` : 'Practice Problem')}
+          {recommendationReason || (problemNum ? `Problem #${problemNum}` : 'Practice Problem')}
         </span>
         <span className="text-accent-blue font-semibold group-hover:translate-x-1 transition-transform">Solve →</span>
       </div>

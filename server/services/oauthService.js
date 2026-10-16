@@ -126,7 +126,8 @@ function consumeExchangeTicket(ticket) {
  * Google OAuth URL Builder with Nonce Support
  */
 function getGoogleAuthUrl(state, nonce) {
-  const clientId = process.env.GOOGLE_CLIENT_ID || 'MOCK_GOOGLE_CLIENT_ID';
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) throw new Error('Google OAuth client configuration is missing on server.');
   const callbackUrl = process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/api/auth/google/callback';
 
   const params = new URLSearchParams({
@@ -148,7 +149,7 @@ function getGoogleAuthUrl(state, nonce) {
  */
 async function exchangeGoogleCode(code, expectedNonce = null) {
   // Test/Mock bypass hook for E2E tests
-  if (code.startsWith('mock_google_code_')) {
+  if (process.env.NODE_ENV === 'test' && code.startsWith('mock_google_code_')) {
     const mockId = code.replace('mock_google_code_', '');
     return {
       providerAccountId: `google_uid_${mockId}`,
@@ -234,7 +235,8 @@ async function exchangeGoogleCode(code, expectedNonce = null) {
  * GitHub OAuth URL Builder with PKCE S256 Code Challenge
  */
 function getGitHubAuthUrl(state, codeChallenge = null) {
-  const clientId = process.env.GITHUB_CLIENT_ID || 'MOCK_GITHUB_CLIENT_ID';
+  const clientId = process.env.GITHUB_CLIENT_ID;
+  if (!clientId) throw new Error('GitHub OAuth client configuration is missing on server.');
   const callbackUrl = process.env.GITHUB_CALLBACK_URL || 'http://localhost:5000/api/auth/github/callback';
 
   const params = new URLSearchParams({
@@ -257,7 +259,7 @@ function getGitHubAuthUrl(state, codeChallenge = null) {
  */
 async function exchangeGitHubCode(code, codeVerifier = null) {
   // Test/Mock bypass hook for E2E tests
-  if (code.startsWith('mock_github_code_')) {
+  if (process.env.NODE_ENV === 'test' && code.startsWith('mock_github_code_')) {
     const mockId = code.replace('mock_github_code_', '');
     return {
       providerAccountId: `github_uid_${mockId}`,

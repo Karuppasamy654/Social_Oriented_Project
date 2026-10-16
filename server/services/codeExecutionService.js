@@ -3,6 +3,15 @@ const axios = require('axios');
 const JUDGE0_URL = process.env.JUDGE0_URL || 'https://ce.judge0.com';
 const CPP17_LANGUAGE_ID = parseInt(process.env.JUDGE0_CPP_LANG_ID || '54', 10); // C++ (GCC 9.2.0)
 
+// Arbitrary submissions must never be compiled on the API process in a deployed
+// environment.  The local runner remains available only for explicitly enabled
+// isolated test environments; production uses a separately sandboxed Judge0
+// instance.
+function isUnsafeLocalExecutionAllowed() {
+  return process.env.NODE_ENV !== 'production' || process.env.ALLOW_UNSAFE_LOCAL_EXECUTION === 'true';
+}
+
+
 /**
  * Format string/bracket input into stdin for C++ test harness
  */
@@ -343,7 +352,7 @@ async function runSingleJudge0Test(sourceCode, input, expectedOutput, compiledCo
 
   // Fast-path: Use local g++ compiler if available or specified
   const hasCustomJudge0 = Boolean(process.env.JUDGE0_URL && process.env.JUDGE0_URL !== 'https://ce.judge0.com');
-  if (!hasCustomJudge0 || process.env.USE_LOCAL_COMPILER === 'true' || process.env.NODE_ENV === 'test') {
+  if (isUnsafeLocalExecutionAllowed()) {
     try {
       const localResult = runLocalCppTest(sourceCode, input, expectedOutput, compiledContext);
       if (localResult && localResult.statusDesc) {
@@ -367,7 +376,11 @@ async function runSingleJudge0Test(sourceCode, input, expectedOutput, compiledCo
 
   try {
     const response = await axios.post(`${JUDGE0_URL}/submissions?wait=true&base64_encoded=true`, payload, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(process.env.JUDGE0_KEY ? { 'X-RapidAPI-Key': process.env.JUDGE0_KEY } : {}),
+        ...(process.env.JUDGE0_HOST ? { 'X-RapidAPI-Host': process.env.JUDGE0_HOST } : {})
+      },
       timeout: 1500
     });
 
@@ -412,8 +425,12 @@ async function runSingleJudge0Test(sourceCode, input, expectedOutput, compiledCo
       rawJudge0Data: data
     };
   } catch (err) {
-    // Fallback immediately to local g++ compiler if Judge0 API is unreachable
-    return runLocalCppTest(sourceCode, input, expectedOutput);
+    if (isUnsafeLocalExecutionAllowed()) {
+      return runLocalCppTest(sourceCode, input, expectedOutput);
+    }
+    const executionError = new Error('Code execution service is unavailable. Configure a reachable sandboxed Judge0 instance.');
+    executionError.statusCode = 503;
+    throw executionError;
   }
 }
 
@@ -422,10 +439,7 @@ async function runSingleJudge0Test(sourceCode, input, expectedOutput, compiledCo
  */
 async function executeSampleTests(sourceCode, sampleTests = []) {
   if (!sampleTests || sampleTests.length === 0) {
-    sampleTests = [
-      { input: "[2, 7, 11, 15]\n9", expectedOutput: "[0,1]" },
-      { input: "[3, 2, 4]\n6", expectedOutput: "[1,2]" }
-    ];
+    throw new Error('No sample tests are configured for this problem.');
   }
 
   const results = [];
@@ -467,24 +481,8 @@ async function executeSampleTests(sourceCode, sampleTests = []) {
  * Note: Returned summary object contains full execution metrics for Node backend.
  */
 async function executeFullSubmission(sourceCode, visibleTests = [], hiddenTests = []) {
-  if (!visibleTests || visibleTests.length === 0) {
-    visibleTests = [
-      { input: "[2, 7, 11, 15]\n9", expectedOutput: "[0,1]" },
-      { input: "[3, 2, 4]\n6", expectedOutput: "[1,2]" }
-    ];
-  }
-
-  if (!hiddenTests || hiddenTests.length < 8) {
-    hiddenTests = [
-      { input: "[3, 3]\n6", expectedOutput: "[0,1]" },
-      { input: "[1, 5, 8, 3, 12]\n11", expectedOutput: "[2,3]" },
-      { input: "[0, 4, 3, 0]\n0", expectedOutput: "[0,3]" },
-      { input: "[-1, -2, -3, -4, -5]\n-8", expectedOutput: "[2,4]" },
-      { input: "[10, 20, 30, 40, 50]\n90", expectedOutput: "[3,4]" },
-      { input: "[100, 200, 300, 400]\n500", expectedOutput: "[1,2]" },
-      { input: "[1, 1, 1, 1, 1]\n2", expectedOutput: "[0,1]" },
-      { input: "[5, 4, 3, 2, 1]\n9", expectedOutput: "[0,1]" }
-    ];
+  if (!visibleTests || visibleTests.length === 0 || !hiddenTests || hiddenTests.length === 0) {
+    throw new Error('This problem must define visible and hidden test cases before submission.');
   }
 
   const allCases = [
@@ -502,7 +500,7 @@ async function executeFullSubmission(sourceCode, visibleTests = [], hiddenTests 
 
   let compiledContext = null;
   const hasCustomJudge0 = Boolean(process.env.JUDGE0_URL && process.env.JUDGE0_URL !== 'https://ce.judge0.com');
-  if (!hasCustomJudge0 || process.env.USE_LOCAL_COMPILER === 'true' || process.env.NODE_ENV === 'test') {
+  if (isUnsafeLocalExecutionAllowed()) {
     try {
       const finalCode = wrapUserCodeWithHarness(sourceCode);
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-cpp-'));
