@@ -2,7 +2,11 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 
-const configuredOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:3000')
+const defaultProductionOrigins = [
+  'https://s-o-20cwynyw9-karuppasamy654s-projects.vercel.app'
+];
+
+const configuredOrigins = (process.env.CLIENT_ORIGIN || `http://localhost:3000,${defaultProductionOrigins[0]}`)
   .split(',').map(origin => origin.trim()).filter(Boolean);
 
 // Browsers treat localhost and 127.0.0.1 as different origins. Permit both
@@ -10,7 +14,7 @@ const configuredOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:3000')
 const localOrigins = process.env.NODE_ENV === 'production'
   ? []
   : ['http://localhost:3000', 'http://127.0.0.1:3000'];
-const allowedOrigins = [...new Set([...configuredOrigins, ...localOrigins])];
+const allowedOrigins = [...new Set([...defaultProductionOrigins, ...configuredOrigins, ...localOrigins])];
 
 function originIsAllowed(origin) {
   if (!origin) return true;
@@ -40,7 +44,8 @@ const securityMiddleware = [
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    optionsSuccessStatus: 204
   })
 ];
 

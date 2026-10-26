@@ -1,8 +1,10 @@
 import axios from 'axios';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ||
-  (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api'))
-  .replace(/\/+$/, '');
+const runtimeApiBase = (typeof window !== 'undefined' && window.__CODEBUDDY_CONFIG__?.apiBaseUrl)
+  ? window.__CODEBUDDY_CONFIG__.apiBaseUrl
+  : (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
+
+const API_BASE_URL = runtimeApiBase.replace(/\/+$/, '');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
