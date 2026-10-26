@@ -252,14 +252,35 @@ export default function StudyRoomWorkspace() {
 
     if (!socketRef.current) {
       const socketUrl = (() => {
+        const viteSocketUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SOCKET_URL)
+          ? import.meta.env.VITE_SOCKET_URL
+          : '';
+
+        if (viteSocketUrl) return viteSocketUrl;
+
         const runtimeSocketUrl = typeof window !== 'undefined' && window.__CODEBUDDY_CONFIG__?.socketUrl
           ? window.__CODEBUDDY_CONFIG__.socketUrl
-          : (import.meta.env.VITE_SOCKET_URL || '');
+          : '';
 
         if (runtimeSocketUrl) return runtimeSocketUrl;
+
+        const viteApiBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL)
+          ? import.meta.env.VITE_API_BASE_URL
+          : '';
+
+        const apiBaseCandidate = viteApiBase || (typeof window !== 'undefined' && window.__CODEBUDDY_CONFIG__?.apiBaseUrl
+          ? window.__CODEBUDDY_CONFIG__.apiBaseUrl
+          : '');
+
+        if (apiBaseCandidate) {
+          const derivedSocketOrigin = apiBaseCandidate.replace(/\/api\/?$/, '');
+          if (derivedSocketOrigin && derivedSocketOrigin !== '/api') return derivedSocketOrigin;
+        }
+
         if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
           return 'http://localhost:5000';
         }
+
         return 'https://social-oriented-project.onrender.com';
       })();
 

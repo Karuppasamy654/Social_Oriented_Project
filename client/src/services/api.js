@@ -1,8 +1,12 @@
 import axios from 'axios';
 
+const viteApiBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL)
+  ? import.meta.env.VITE_API_BASE_URL
+  : '';
+
 const runtimeApiBase = (typeof window !== 'undefined' && window.__CODEBUDDY_CONFIG__?.apiBaseUrl)
   ? window.__CODEBUDDY_CONFIG__.apiBaseUrl
-  : (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
+  : viteApiBase || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
 
 const API_BASE_URL = runtimeApiBase.replace(/\/+$/, '');
 

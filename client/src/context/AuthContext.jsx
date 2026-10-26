@@ -45,9 +45,12 @@ export const AuthProvider = ({ children }) => {
   };
 
   const initiateOAuth = (provider, action = 'login', redirect = '/dashboard') => {
+    const viteApiBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL)
+      ? import.meta.env.VITE_API_BASE_URL
+      : '';
     const apiBase = (typeof window !== 'undefined' && window.__CODEBUDDY_CONFIG__?.apiBaseUrl)
       ? window.__CODEBUDDY_CONFIG__.apiBaseUrl
-      : (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
+      : viteApiBase || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
     window.location.href = `${apiBase.replace(/\/+$/, '')}/auth/${provider}?action=${action}&redirect=${encodeURIComponent(redirect)}`;
   };
 
