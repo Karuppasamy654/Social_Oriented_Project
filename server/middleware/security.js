@@ -4,6 +4,7 @@ const cors = require('cors');
 
 const configuredOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:3000')
   .split(',').map(origin => origin.trim()).filter(Boolean);
+
 // Browsers treat localhost and 127.0.0.1 as different origins. Permit both
 // only for local development/test; production stays limited to CLIENT_ORIGIN.
 const localOrigins = process.env.NODE_ENV === 'production'
@@ -13,11 +14,18 @@ const allowedOrigins = [...new Set([...configuredOrigins, ...localOrigins])];
 
 function originIsAllowed(origin) {
   if (!origin) return true;
+
   if (process.env.NODE_ENV !== 'production') {
     // Permit any local development origin (localhost or 127.0.0.1 on any port)
     if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
   }
-  return allowedOrigins.includes(origin);
+
+  if (allowedOrigins.includes(origin)) return true;
+
+  // Permit Vercel production frontends without requiring one hardcoded hostname.
+  if (/^https:\/\/.*\.vercel\.app$/i.test(origin)) return true;
+
+  return false;
 }
 
 const securityMiddleware = [
@@ -31,7 +39,8 @@ const securityMiddleware = [
       callback(null, originIsAllowed(origin));
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
   })
 ];
 

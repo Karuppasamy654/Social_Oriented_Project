@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   ai-service:
@@ -7,8 +6,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - PORT=8000
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      PORT: "8000"
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
 
   server:
     build:
@@ -16,10 +15,10 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - PORT=5000
-      - MONGODB_URI=mongodb://mongodb:27017/codebuddy
-      - AI_SERVICE_URL=http://ai-service:8000
-      - JWT_SECRET=${JWT_SECRET:-codebuddy_super_secret_jwt_key_2026}
+      PORT: "5000"
+      MONGODB_URI: mongodb://mongodb:27017/codebuddy
+      AI_SERVICE_URL: http://ai-service:8000
+      JWT_SECRET: ${JWT_SECRET:-codebuddy_super_secret_jwt_key_2026}
     depends_on:
       - ai-service
       - mongodb
