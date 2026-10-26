@@ -251,7 +251,13 @@ export default function StudyRoomWorkspace() {
     const token = rawToken.startsWith('Bearer ') ? rawToken : `Bearer ${rawToken}`;
 
     if (!socketRef.current) {
-      const socketUrl = window.location.origin;
+      const socketUrl = (() => {
+        if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+          return 'http://localhost:5000';
+        }
+        return 'https://social-oriented-project.onrender.com';
+      })();
+
       const newSocket = io(socketUrl, {
         auth: { token },
         transports: ['websocket', 'polling'],
