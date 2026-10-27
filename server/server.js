@@ -21,6 +21,11 @@ const { setupSocketIO } = require('./sockets/socketHandler');
 const { seedInitialData } = require('./scripts/seedData');
 
 const app = express();
+
+// Trust reverse proxy (Render, Heroku, Cloudflare, AWS ELB, etc.)
+// Required for express-rate-limit to read X-Forwarded-For correctly
+app.set('trust proxy', 1);
+
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
