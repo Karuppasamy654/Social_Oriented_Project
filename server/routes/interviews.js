@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const InterviewSession = require('../models/InterviewSession');
+const Problem = require('../models/Problem');
 const { authMiddleware, optionalAuthMiddleware } = require('../middleware/auth');
 const { startInterviewSession, evaluateQuestionSubmission, selectNextAdaptiveQuestion, evaluateInterview, getInterviewRoundConfig } = require('../ai/interviewService');
 
