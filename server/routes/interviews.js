@@ -212,7 +212,18 @@ router.post(['/question/next', '/:id/next'], authMiddleware, async (req, res) =>
     }
     const evaluatedCount = session.performanceHistory?.length || 0;
     if (evaluatedCount <= session.currentQIndex && session.questions[session.currentQIndex]?.status !== 'evaluated') {
-      return res.status(409).json({ message: 'Submit the current coding question before continuing.' });
+      if (req.body.userCode && String(req.body.userCode).trim()) {
+        await evaluateQuestionSubmission({
+          session,
+          questionIndex: session.currentQIndex,
+          userCode: req.body.userCode,
+          language: 'cpp',
+          timeSpent: Math.max(0, Number(req.body.durationSeconds) || 0),
+          runOnly: false
+        });
+      } else {
+        return res.status(409).json({ message: 'Submit the current coding question before continuing.' });
+      }
     }
     const question = await selectNextAdaptiveQuestion({ session });
     if (!question) return res.json({ completed: true, report: await finishSession(session), nextQuestion: null });

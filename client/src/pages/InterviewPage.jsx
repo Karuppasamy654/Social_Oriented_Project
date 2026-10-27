@@ -128,6 +128,9 @@ export default function InterviewPage() {
       }
     } catch (err) {
       console.error('Error fetching next question:', err);
+      if (err.response?.status === 409) {
+        alert(err.response?.data?.message || 'Please submit your code for evaluation before proceeding to the next question.');
+      }
     } finally {
       setLoadingNext(false);
     }

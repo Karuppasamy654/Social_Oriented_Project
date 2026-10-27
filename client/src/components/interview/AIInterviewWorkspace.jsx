@@ -477,17 +477,38 @@ export default function AIInterviewWorkspace({
 
           {/* Navigation Controls */}
           <div className="pt-4 border-t border-surface-border flex items-center justify-between">
-            <span className="text-[11px] text-gray-400 font-mono">
-              Question {session?.currentQIndex + 1 || 1} of {session?.problemCount || 2}
-            </span>
+            <div className="flex items-center space-x-2">
+              <span className="text-[11px] text-gray-400 font-mono">
+                Question {(session?.currentQIndex || 0) + 1} of {session?.problemCount || 2}
+              </span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
+                testResults?.isSubmitted
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+              }`}>
+                {testResults?.isSubmitted ? '✓ Evaluated' : 'Pending Submission'}
+              </span>
+            </div>
+
             <button
               type="button"
-              onClick={onNextQuestion}
-              disabled={loadingNext || isTerminated}
-              className="px-4 py-2.5 rounded-xl bg-surface-secondary border border-surface-border text-gray-300 hover:text-white font-bold text-xs flex items-center gap-1.5 disabled:opacity-50"
+              onClick={() => {
+                if (!testResults?.isSubmitted) {
+                  handleSubmitCode();
+                } else {
+                  onNextQuestion();
+                }
+              }}
+              disabled={loadingNext || submitting || isTerminated}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
+                testResults?.isSubmitted
+                  ? 'bg-gradient-to-r from-accent-cyan to-accent-blue text-white shadow-glow-blue hover:opacity-95'
+                  : 'bg-surface-secondary border border-accent-cyan/30 text-accent-cyan hover:bg-accent-cyan/10'
+              } disabled:opacity-50`}
+              title={testResults?.isSubmitted ? 'Proceed to next adaptive question' : 'Submit your code to continue'}
             >
-              {loadingNext ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
-              <span>Next Question →</span>
+              {loadingNext || submitting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+              <span>{testResults?.isSubmitted ? 'Next Question →' : 'Submit & Next →'}</span>
             </button>
           </div>
 
