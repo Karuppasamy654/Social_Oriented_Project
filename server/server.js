@@ -3,7 +3,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const { connectDB } = require('./config/db');
-const { securityMiddleware, apiLimiter, allowedOrigins } = require('./middleware/security');
+const { securityMiddleware, apiLimiter, allowedOrigins, originIsAllowed } = require('./middleware/security');
 
 const authRoutes = require('./routes/auth');
 const usersRoutes = require('./routes/users');
@@ -24,7 +24,9 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      callback(null, originIsAllowed(origin));
+    },
     methods: ['GET', 'POST'],
     credentials: true
   }

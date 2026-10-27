@@ -252,17 +252,27 @@ export default function StudyRoomWorkspace() {
 
     if (!socketRef.current) {
       const socketUrl = (() => {
+        const isVercelHost = (url) => {
+          if (!url) return false;
+          try {
+            const parsed = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+            return parsed.hostname.endsWith('.vercel.app');
+          } catch {
+            return false;
+          }
+        };
+
         const viteSocketUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SOCKET_URL)
           ? import.meta.env.VITE_SOCKET_URL
           : '';
 
-        if (viteSocketUrl) return viteSocketUrl;
+        if (viteSocketUrl && !isVercelHost(viteSocketUrl)) return viteSocketUrl;
 
         const runtimeSocketUrl = typeof window !== 'undefined' && window.__CODEBUDDY_CONFIG__?.socketUrl
           ? window.__CODEBUDDY_CONFIG__.socketUrl
           : '';
 
-        if (runtimeSocketUrl) return runtimeSocketUrl;
+        if (runtimeSocketUrl && !isVercelHost(runtimeSocketUrl)) return runtimeSocketUrl;
 
         const viteApiBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL)
           ? import.meta.env.VITE_API_BASE_URL
@@ -274,7 +284,9 @@ export default function StudyRoomWorkspace() {
 
         if (apiBaseCandidate) {
           const derivedSocketOrigin = apiBaseCandidate.replace(/\/api\/?$/, '');
-          if (derivedSocketOrigin && derivedSocketOrigin !== '/api') return derivedSocketOrigin;
+          if (derivedSocketOrigin && derivedSocketOrigin !== '/api' && !isVercelHost(derivedSocketOrigin)) {
+            return derivedSocketOrigin;
+          }
         }
 
         if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {

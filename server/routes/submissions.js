@@ -8,6 +8,7 @@ const Activity = require('../models/Activity');
 const Notification = require('../models/Notification');
 const codeExecutionService = require('../services/codeExecutionService');
 const pythonService = require('../services/pythonService');
+const mistakeAnalysisService = require('../services/mistakeAnalysisService');
 const { authMiddleware, optionalAuthMiddleware } = require('../middleware/auth');
 
 /**
@@ -203,12 +204,30 @@ router.post('/run', authMiddleware, async (req, res) => {
     const totalCount = runResult.results ? runResult.results.length : 0;
     const verdict = runResult.compileError ? 'Compilation Error' : (runResult.success ? 'Accepted' : 'Wrong Answer');
 
+    // Run AI Code Analysis & Mistake Detection
+    const { aiAnalysis, detectedMistakes } = await mistakeAnalysisService.analyzeCodeAndMistakes({
+      sourceCode,
+      language,
+      problem,
+      executionResult: {
+        verdict,
+        compileError: runResult.compileError,
+        results: runResult.results || [],
+        passedCount,
+        totalCount
+      },
+      userId: req.user ? (req.user.id || req.user._id) : null,
+      saveToProfile: false
+    });
+
     return res.json({
       verdict,
       passedCount,
       totalCount,
       compileError: runResult.compileError,
-      executionResults: runResult.results || []
+      executionResults: runResult.results || [],
+      aiAnalysis,
+      mistakes: detectedMistakes
     });
   } catch (err) {
     console.error('Error in /run:', err);
@@ -249,22 +268,16 @@ router.post('/submit', authMiddleware, async (req, res) => {
 
     const subId = 'sub_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
 
-    let aiCodeAnalysis = null;
-    try {
-      const staticAnalysis = await pythonService.analyzeCodeStatic(sourceCode, language);
-      if (staticAnalysis) {
-        aiCodeAnalysis = {
-          timeComplexity: staticAnalysis.estimated_time_complexity || 'Unknown',
-          spaceComplexity: staticAnalysis.estimated_space_complexity || 'Unknown',
-          confidence: Number(staticAnalysis.confidence || 0),
-          evidence: Array.isArray(staticAnalysis.evidence) ? staticAnalysis.evidence : [],
-          whatDidWell: [],
-          whatCanBeImproved: Array.isArray(staticAnalysis.potential_anti_patterns) ? staticAnalysis.potential_anti_patterns : []
-        };
-      }
-    } catch (_) {
-      // Analysis is optional; execution and persistence must not claim an AI result.
-    }
+    // Run AI Code Analysis & Mistake Detection
+    const { aiAnalysis: analyzedMetrics, detectedMistakes } = await mistakeAnalysisService.analyzeCodeAndMistakes({
+      sourceCode,
+      language,
+      problem,
+      executionResult: execResult,
+      userId,
+      saveToProfile: true
+    });
+    const aiCodeAnalysis = analyzedMetrics;
 
     // Save the execution result and any real AI analysis to MongoDB.
     const submission = await Submission.create({
@@ -290,6 +303,7 @@ router.post('/submit', authMiddleware, async (req, res) => {
       memoryKb: 1024,
       compilerOutput: execResult.compileError || '',
       isPublic: true,
+      detectedMistakes: (detectedMistakes || []).map(m => m.mistakeType || m.title),
       ...(aiCodeAnalysis ? { aiCodeAnalysis } : {})
     });
 
@@ -322,7 +336,8 @@ router.post('/submit', authMiddleware, async (req, res) => {
       totalCases: execResult.totalCases,
       durationSeconds: 0,
       submissionId: subId,
-      aiAnalysis: submission.aiCodeAnalysis,
+      aiAnalysis: submission.aiCodeAnalysis || aiCodeAnalysis,
+      mistakes: detectedMistakes,
       understandingQuestions,
       executionResults: execResult.executionResults
     });
@@ -396,6 +411,8 @@ router.get('/report/:sessionId', authMiddleware, async (req, res) => {
       problemId: submission.problemId
     });
 
+    const userMistakes = isOwner ? await Mistake.find({ userId: submission.userId }).sort({ frequency: -1, occurrenceCount: -1 }).lean() : [];
+
     return res.json({
       sessionId,
       submissionId: submission.submissionId,
@@ -411,6 +428,7 @@ router.get('/report/:sessionId', authMiddleware, async (req, res) => {
       codeScore: submission.codeScore || 100,
       understandingScore: submission.understandingScore || 100,
       attemptCount,
+      userMistakes,
       aiCodeAnalysis: isOwner ? submission.aiCodeAnalysis : null,
       compilerOutput: isOwner ? submission.compilerOutput : null,
       visibleTests: submission.visibleTests,

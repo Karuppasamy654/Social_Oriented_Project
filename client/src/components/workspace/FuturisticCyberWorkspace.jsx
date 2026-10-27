@@ -72,6 +72,9 @@ export default function FuturisticCyberWorkspace({ problemSlugOrId }) {
   const [compilerError, setCompilerError] = useState(null);
   const [testResults, setTestResults] = useState([]);
   const [animatedVisibleCount, setAnimatedVisibleCount] = useState(999);
+  const [consoleTab, setConsoleTab] = useState('tests'); // 'tests' | 'mistakes' | 'analysis'
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [detectedMistakes, setDetectedMistakes] = useState([]);
 
   // Inspector & Auto-Fix Modal
   const [showErrorModal, setShowErrorModal] = useState(false);
@@ -98,6 +101,9 @@ export default function FuturisticCyberWorkspace({ problemSlugOrId }) {
     let isMounted = true;
     setCompilerError(null);
     setTestResults([]);
+    setAiAnalysis(null);
+    setDetectedMistakes([]);
+    setConsoleTab('tests');
     setRepeatWarning(null);
     setRelatedProblems([]);
     setBottomPanelOpen(false);
@@ -254,26 +260,40 @@ export default function FuturisticCyberWorkspace({ problemSlugOrId }) {
       });
 
       setIsRunning(false);
+      const rawResults = res.data.executionResults || res.data.results || [];
+      const hasMistakes = (res.data.mistakes && res.data.mistakes.length > 0) || Boolean(res.data.compileError);
+      
+      setAiAnalysis(res.data.aiAnalysis || null);
+      setDetectedMistakes(res.data.mistakes || []);
+
       if (res.data && res.data.compileError) {
         setCompilerError(res.data.compileError);
         updateMonacoErrorMarkers(res.data.compileError);
-      } else if (res.data && res.data.results) {
-        setTestResults(res.data.results.map((r, i) => ({
+        setConsoleTab('mistakes');
+      } else if (rawResults.length > 0) {
+        setTestResults(rawResults.map((r, i) => ({
           id: i + 1,
           status: r.passed ? 'pass' : 'fail',
-          name: `Sample Case ${i + 1}`,
+          name: r.name || `Sample Case ${i + 1}`,
           input: r.input,
           output: r.actualOutput,
           expected: r.expectedOutput,
           time: `${r.timeMs || 14} ms`,
           isHidden: false
         })));
+
+        if (hasMistakes || rawResults.some(r => !r.passed)) {
+          setConsoleTab('mistakes');
+        } else {
+          setConsoleTab('tests');
+        }
       }
     } catch (err) {
       setIsRunning(false);
       const errMsg = err.response?.data?.message || err.message || 'Execution failed';
       setCompilerError(errMsg);
       updateMonacoErrorMarkers(errMsg);
+      setConsoleTab('mistakes');
     }
   };
 
@@ -311,12 +331,19 @@ export default function FuturisticCyberWorkspace({ problemSlugOrId }) {
 
       if (data.repeatWarning) setRepeatWarning(data.repeatWarning);
       if (data.relatedProblems) setRelatedProblems(data.relatedProblems);
+      if (data.aiAnalysis) setAiAnalysis(data.aiAnalysis);
+      if (data.mistakes) setDetectedMistakes(data.mistakes);
 
       if (data.compileError || data.verdict === 'Compilation Error') {
         const errMsg = data.compileError || 'Compilation Error';
         setCompilerError(errMsg);
         updateMonacoErrorMarkers(errMsg);
+        setConsoleTab('mistakes');
         return;
+      }
+
+      if (data.mistakes && data.mistakes.length > 0) {
+        setConsoleTab('mistakes');
       }
 
       if (data.executionResults) {
@@ -614,40 +641,156 @@ export default function FuturisticCyberWorkspace({ problemSlugOrId }) {
             />
           </div>
 
-          {/* Console Bar Toggle Button */}
-          <div className="bg-[#050811] px-4 py-1.5 border-t border-slate-800 flex items-center justify-between shrink-0 font-mono text-xs">
-            <button
-              onClick={() => setBottomPanelOpen(!bottomPanelOpen)}
-              className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 font-bold transition-colors cursor-pointer"
-            >
-              <TerminalIcon className="w-3.5 h-3.5" />
-              <span>Console & Test Results</span>
-              {testResults.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  {testResults.filter(r => r.status === 'pass').length}/{testResults.length} Passed
-                </span>
-              )}
-            </button>
-            <span className="text-[10px] text-slate-500">Judge0 C++17 Sandbox</span>
+          {/* Console Bar Toggle & Tab Selectors */}
+          <div className="bg-[#050811] px-4 py-2 border-t border-slate-800 flex items-center justify-between shrink-0 font-mono text-xs">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setBottomPanelOpen(true);
+                  setConsoleTab('tests');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                  bottomPanelOpen && consoleTab === 'tests'
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <TerminalIcon className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Test Cases</span>
+                {testResults.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    {testResults.filter(r => r.status === 'pass').length}/{testResults.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setBottomPanelOpen(true);
+                  setConsoleTab('mistakes');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                  bottomPanelOpen && consoleTab === 'mistakes'
+                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <AlertTriangle className={`w-3.5 h-3.5 ${detectedMistakes.length > 0 ? 'text-rose-400 animate-pulse' : 'text-slate-400'}`} />
+                <span>Mistakes & Issues</span>
+                {detectedMistakes.length > 0 ? (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500/30 text-rose-300 border border-rose-500/40 font-bold">
+                    {detectedMistakes.length}
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    0
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setBottomPanelOpen(true);
+                  setConsoleTab('analysis');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                  bottomPanelOpen && consoleTab === 'analysis'
+                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 font-bold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <BrainCircuit className="w-3.5 h-3.5 text-purple-400" />
+                <span>Code Analysis</span>
+                {aiAnalysis && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                    {aiAnalysis.timeComplexity || 'O(N)'}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setBottomPanelOpen(!bottomPanelOpen)}
+                className="text-[11px] text-cyan-400 hover:text-cyan-300 transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <span>{bottomPanelOpen ? 'Collapse' : 'Expand'}</span>
+              </button>
+              <span className="text-[10px] text-slate-500 hidden sm:inline">Judge0 C++17 Sandbox</span>
+            </div>
           </div>
 
           {/* Bottom Execution & Test Cases Panel */}
           <AnimatePresence>
             {bottomPanelOpen && (
               <motion.div
-                initial={{ y: 220, opacity: 0 }}
+                initial={{ y: 240, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 220, opacity: 0 }}
-                className="h-64 bg-[#070b15]/98 backdrop-blur-2xl border-t border-cyan-500/40 p-4 flex flex-col overflow-hidden font-mono z-10 shadow-[0_-10px_30px_rgba(0,0,0,0.8)]"
+                exit={{ y: 240, opacity: 0 }}
+                className="h-80 bg-[#070b15]/98 backdrop-blur-2xl border-t border-cyan-500/40 p-4 flex flex-col overflow-hidden font-mono z-10 shadow-[0_-10px_30px_rgba(0,0,0,0.8)]"
               >
+                {/* Panel Header & Tabs */}
                 <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-xs">
-                  <div className="flex items-center gap-2">
-                    <TerminalIcon className="w-4 h-4 text-cyan-400" />
-                    <span className="text-cyan-300 font-bold">Execution Output Console</span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setConsoleTab('tests')}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+                        consoleTab === 'tests'
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <TerminalIcon className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Test Results</span>
+                      {testResults.length > 0 && (
+                        <span className="ml-1 text-[10px] px-1.5 py-0.2 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800">
+                          {testResults.filter(r => r.status === 'pass').length}/{testResults.length}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => setConsoleTab('mistakes')}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+                        consoleTab === 'mistakes'
+                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <AlertTriangle className={`w-3.5 h-3.5 ${detectedMistakes.length > 0 ? 'text-rose-400' : 'text-slate-400'}`} />
+                      <span>Mistakes Analysis</span>
+                      {detectedMistakes.length > 0 ? (
+                        <span className="ml-1 text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500/30 text-rose-300 border border-rose-500/40">
+                          {detectedMistakes.length} Issue{detectedMistakes.length > 1 ? 's' : ''}
+                        </span>
+                      ) : (
+                        <span className="ml-1 text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                          Clean
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => setConsoleTab('analysis')}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+                        consoleTab === 'analysis'
+                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <BrainCircuit className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Code Complexity</span>
+                      {aiAnalysis && (
+                        <span className="ml-1 text-[10px] px-1.5 py-0.2 rounded-full bg-purple-950 text-purple-300 border border-purple-800">
+                          {aiAnalysis.timeComplexity}
+                        </span>
+                      )}
+                    </button>
+
                     {(isRunning || isSubmitting) && (
                       <span className="flex items-center gap-1.5 text-xs text-amber-300 animate-pulse bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
                         <Zap className="w-3 h-3 animate-spin" />
-                        <span>Running C++17 Solution...</span>
+                        <span>Analyzing & Executing C++17 Solution...</span>
                       </span>
                     )}
                   </div>
@@ -656,60 +799,247 @@ export default function FuturisticCyberWorkspace({ problemSlugOrId }) {
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto pt-3 space-y-3 text-xs">
+                {/* Panel Scrollable Content */}
+                <div className="flex-1 overflow-y-auto pt-3 space-y-3 text-xs pr-1">
                   {(isRunning || isSubmitting) ? (
-                    <div className="h-full flex flex-col items-center justify-center space-y-3 py-6">
+                    <div className="h-full flex flex-col items-center justify-center space-y-3 py-8">
                       <Zap className="w-8 h-8 text-cyan-400 animate-spin" />
-                      <p className="text-slate-300 text-xs font-bold">Compiling & Executing Solution with GCC 9.2.0...</p>
+                      <p className="text-slate-300 text-xs font-bold">Compiling, Testing & Analyzing Solution with AI AST Engine...</p>
                     </div>
-                  ) : compilerError ? (
-                    <div className="p-4 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 space-y-3">
-                      <div className="flex items-center justify-between font-bold">
-                        <span className="flex items-center gap-2 text-rose-400 text-sm">
-                          <XCircle className="w-4 h-4" />
-                          <span>C++ Compilation / Runtime Error</span>
-                        </span>
-                        <button
-                          onClick={() => handleInspectError(compilerError)}
-                          className="px-3.5 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-bold flex items-center gap-1.5 hover:bg-rose-500 cursor-pointer shadow-md"
-                        >
-                          <Wand2 className="w-3.5 h-3.5" />
-                          <span>Inspect Error Marker</span>
-                        </button>
-                      </div>
-                      <pre className="text-xs font-mono whitespace-pre-wrap text-rose-200 bg-black/50 p-3 rounded-lg border border-rose-500/30 overflow-x-auto">
-                        {compilerError}
-                      </pre>
-                    </div>
-                  ) : testResults.length > 0 ? (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-                        {testResults.slice(0, animatedVisibleCount).map((tr) => (
-                          <div
-                            key={tr.id}
-                            className={`p-3 rounded-xl border text-xs flex flex-col justify-between space-y-2 ${
-                              tr.status === 'pass'
-                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                                : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-1.5 font-bold">
-                                {tr.status === 'pass' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <XCircle className="w-4 h-4 text-rose-400" />}
-                                <span>{tr.name}</span>
-                              </div>
-                              <span className="text-[10px] opacity-75">{tr.time}</span>
-                            </div>
-                            {tr.input && <div className="text-[11px] font-mono text-slate-300 truncate"><span className="text-slate-500">In:</span> {tr.input}</div>}
-                            {tr.expected && <div className="text-[11px] font-mono text-emerald-400 truncate"><span className="text-slate-500">Exp:</span> {tr.expected}</div>}
+                  ) : consoleTab === 'mistakes' ? (
+                    /* TAB 2: MISTAKES & ISSUES DIAGNOSTICS */
+                    <div className="space-y-3 font-mono">
+                      {compilerError && (
+                        <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 space-y-2">
+                          <div className="flex items-center justify-between font-bold">
+                            <span className="flex items-center gap-2 text-rose-400 text-xs">
+                              <XCircle className="w-4 h-4" />
+                              <span>C++ Compilation / Syntax Error</span>
+                            </span>
+                            <button
+                              onClick={() => handleInspectError(compilerError)}
+                              className="px-2.5 py-1 rounded bg-rose-600 text-white text-[11px] font-bold flex items-center gap-1 hover:bg-rose-500 cursor-pointer shadow-sm"
+                            >
+                              <Wand2 className="w-3 h-3" />
+                              <span>Inspect Line Marker</span>
+                            </button>
                           </div>
-                        ))}
-                      </div>
+                          <pre className="text-[11px] font-mono whitespace-pre-wrap text-rose-200 bg-black/50 p-2.5 rounded border border-rose-500/30 overflow-x-auto">
+                            {compilerError}
+                          </pre>
+                        </div>
+                      )}
+
+                      {detectedMistakes.length > 0 ? (
+                        <div className="space-y-3">
+                          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-amber-300 text-xs">
+                            <span className="flex items-center gap-2 font-bold">
+                              <AlertTriangle className="w-4 h-4 text-amber-400" />
+                              <span>AI Code Analyzer detected {detectedMistakes.length} mistake(s) in your implementation:</span>
+                            </span>
+                            <span className="text-[10px] text-amber-400/80 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-500/30">
+                              FIX RECOMMENDATIONS BELOW
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-2.5">
+                            {detectedMistakes.map((m, idx) => (
+                              <div
+                                key={idx}
+                                className={`p-3.5 rounded-xl border text-xs space-y-2 transition-all shadow-sm ${
+                                  m.severity === 'critical'
+                                    ? 'bg-rose-950/20 border-rose-500/50 text-rose-200'
+                                    : m.severity === 'high'
+                                    ? 'bg-orange-950/20 border-orange-500/50 text-orange-200'
+                                    : 'bg-amber-950/20 border-amber-500/40 text-amber-200'
+                                }`}
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${
+                                        m.severity === 'critical'
+                                          ? 'bg-rose-500 text-white'
+                                          : m.severity === 'high'
+                                          ? 'bg-orange-500 text-white'
+                                          : 'bg-amber-500/30 text-amber-300 border border-amber-500/40'
+                                      }`}
+                                    >
+                                      {m.severity || 'ISSUE'}
+                                    </span>
+                                    <span className="font-bold text-white text-xs">{m.title}</span>
+                                  </div>
+
+                                  {m.isRecurring && (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+                                      🚨 REPEATED MISTAKE ({m.frequency}x)
+                                    </span>
+                                  )}
+                                </div>
+
+                                <p className="text-slate-300 text-xs leading-relaxed font-sans">{m.description}</p>
+
+                                {m.suggestion && (
+                                  <div className="p-2.5 rounded-lg bg-black/40 border border-slate-800 text-xs space-y-1 font-mono">
+                                    <div className="flex items-center gap-1.5 text-cyan-400 font-bold text-[11px]">
+                                      <Lightbulb className="w-3.5 h-3.5 text-cyan-400" />
+                                      <span>Actionable Fix & Recommendation:</span>
+                                    </div>
+                                    <p className="text-slate-300 text-[11px] font-normal leading-relaxed">{m.suggestion}</p>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : !compilerError ? (
+                        <div className="p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-3">
+                          <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
+                          <div className="space-y-1">
+                            <h4 className="text-sm font-bold text-emerald-300">Clean & Optimal Solution! No Mistakes Detected.</h4>
+                            <p className="text-xs text-slate-300 font-sans max-w-md mx-auto">
+                              Your C++ code passed all static AST safety checks. No off-by-one boundary leaks, unguarded hash lookups, or redundant loops found.
+                            </p>
+                          </div>
+                          {aiAnalysis && (
+                            <div className="flex items-center justify-center gap-4 text-xs font-mono pt-2">
+                              <span className="text-cyan-300 bg-cyan-950/60 px-3 py-1 rounded border border-cyan-500/30">
+                                Estimated Time: <strong className="text-white">{aiAnalysis.timeComplexity}</strong>
+                              </span>
+                              <span className="text-purple-300 bg-purple-950/60 px-3 py-1 rounded border border-purple-500/30">
+                                Estimated Space: <strong className="text-white">{aiAnalysis.spaceComplexity}</strong>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : consoleTab === 'analysis' ? (
+                    /* TAB 3: CODE COMPLEXITY & HEURISTICS */
+                    <div className="space-y-3 font-mono">
+                      {aiAnalysis ? (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
+                            <div className="p-3 rounded-xl bg-black/40 border border-slate-800 space-y-1">
+                              <span className="text-[10px] text-slate-400 block uppercase">Time Complexity</span>
+                              <span className="text-base font-extrabold text-cyan-400">{aiAnalysis.timeComplexity || 'O(N)'}</span>
+                            </div>
+                            <div className="p-3 rounded-xl bg-black/40 border border-slate-800 space-y-1">
+                              <span className="text-[10px] text-slate-400 block uppercase">Space Complexity</span>
+                              <span className="text-base font-extrabold text-purple-400">{aiAnalysis.spaceComplexity || 'O(1)'}</span>
+                            </div>
+                            <div className="p-3 rounded-xl bg-black/40 border border-slate-800 space-y-1">
+                              <span className="text-[10px] text-slate-400 block uppercase">Max Loop Nesting</span>
+                              <span className="text-base font-extrabold text-amber-400">{aiAnalysis.nestedLoopMaxDepth || 0} Levels</span>
+                            </div>
+                            <div className="p-3 rounded-xl bg-black/40 border border-slate-800 space-y-1">
+                              <span className="text-[10px] text-slate-400 block uppercase">Recursion Call</span>
+                              <span className="text-base font-extrabold text-emerald-400">{aiAnalysis.hasRecursion ? 'Yes' : 'No'}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="p-3.5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-2">
+                              <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-xs">
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>What You Did Well</span>
+                              </div>
+                              <ul className="space-y-1 text-slate-300 text-[11px] font-sans">
+                                {(aiAnalysis.whatDidWell || ['Clean algorithmic layout']).map((item, i) => (
+                                  <li key={i} className="flex items-start gap-1.5">
+                                    <span className="text-emerald-400 font-bold">•</span>
+                                    <span>{item}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/30 space-y-2">
+                              <div className="flex items-center gap-1.5 text-amber-400 font-bold text-xs">
+                                <Lightbulb className="w-4 h-4" />
+                                <span>Optimization Suggestions</span>
+                              </div>
+                              <ul className="space-y-1 text-slate-300 text-[11px] font-sans">
+                                {(aiAnalysis.whatCanBeImproved || ['Maintain optimal linear runtime']).map((item, i) => (
+                                  <li key={i} className="flex items-start gap-1.5">
+                                    <span className="text-amber-400 font-bold">•</span>
+                                    <span>{item}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+
+                          {aiAnalysis.evidence && aiAnalysis.evidence.length > 0 && (
+                            <div className="p-3 rounded-xl bg-black/40 border border-slate-800 space-y-1 text-slate-400 text-[11px]">
+                              <span className="font-bold text-slate-300 block">AST Code Evidence:</span>
+                              <p className="font-sans leading-relaxed">{aiAnalysis.evidence.join(' ')}</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-500 py-6">
+                          <BrainCircuit className="w-8 h-8 mb-2 opacity-50" />
+                          <p className="text-xs">Execute "Run Code" or "Submit Code" to generate AST complexity analysis.</p>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-500 py-6">
-                      <TerminalIcon className="w-8 h-8 mb-2 opacity-50" />
-                      <p className="text-xs">Click "Run Code" or "Submit Code" to execute test harness.</p>
+                    /* TAB 1: TEST CASES */
+                    <div className="space-y-3">
+                      {compilerError ? (
+                        <div className="p-4 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 space-y-3">
+                          <div className="flex items-center justify-between font-bold">
+                            <span className="flex items-center gap-2 text-rose-400 text-sm">
+                              <XCircle className="w-4 h-4" />
+                              <span>C++ Compilation / Runtime Error</span>
+                            </span>
+                            <button
+                              onClick={() => handleInspectError(compilerError)}
+                              className="px-3.5 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-bold flex items-center gap-1.5 hover:bg-rose-500 cursor-pointer shadow-md"
+                            >
+                              <Wand2 className="w-3.5 h-3.5" />
+                              <span>Inspect Error Marker</span>
+                            </button>
+                          </div>
+                          <pre className="text-xs font-mono whitespace-pre-wrap text-rose-200 bg-black/50 p-3 rounded-lg border border-rose-500/30 overflow-x-auto">
+                            {compilerError}
+                          </pre>
+                        </div>
+                      ) : testResults.length > 0 ? (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                            {testResults.slice(0, animatedVisibleCount).map((tr) => (
+                              <div
+                                key={tr.id}
+                                className={`p-3 rounded-xl border text-xs flex flex-col justify-between space-y-2 ${
+                                  tr.status === 'pass'
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                                    : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5 font-bold">
+                                    {tr.status === 'pass' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <XCircle className="w-4 h-4 text-rose-400" />}
+                                    <span>{tr.name}</span>
+                                  </div>
+                                  <span className="text-[10px] opacity-75">{tr.time}</span>
+                                </div>
+                                {tr.input && <div className="text-[11px] font-mono text-slate-300 truncate"><span className="text-slate-500">In:</span> {tr.input}</div>}
+                                {tr.expected && <div className="text-[11px] font-mono text-emerald-400 truncate"><span className="text-slate-500">Exp:</span> {tr.expected}</div>}
+                                {tr.status !== 'pass' && tr.output && (
+                                  <div className="text-[11px] font-mono text-rose-400 truncate"><span className="text-slate-500">Got:</span> {tr.output}</div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-500 py-6">
+                          <TerminalIcon className="w-8 h-8 mb-2 opacity-50" />
+                          <p className="text-xs">Click "Run Code" or "Submit Code" to execute test harness.</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

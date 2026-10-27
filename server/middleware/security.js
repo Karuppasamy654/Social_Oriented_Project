@@ -3,6 +3,7 @@ const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 
 const defaultProductionOrigins = [
+  'https://s-o-p.vercel.app',
   'https://client-ten-pi-39.vercel.app',
   'https://client-huqud2r0z-karuppasamy654s-projects.vercel.app'
 ];
