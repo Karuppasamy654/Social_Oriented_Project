@@ -493,22 +493,21 @@ export default function AIInterviewWorkspace({
             <button
               type="button"
               onClick={() => {
-                if (!testResults?.isSubmitted) {
-                  handleSubmitCode();
-                } else {
-                  onNextQuestion();
-                }
+                onNextQuestion({
+                  userCode,
+                  durationSeconds: Math.max(1, (session?.durationMinutes || 15) * 60 - timeLeft)
+                });
               }}
               disabled={loadingNext || submitting || isTerminated}
               className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
                 testResults?.isSubmitted
                   ? 'bg-gradient-to-r from-accent-cyan to-accent-blue text-white shadow-glow-blue hover:opacity-95'
-                  : 'bg-surface-secondary border border-accent-cyan/30 text-accent-cyan hover:bg-accent-cyan/10'
+                  : 'bg-surface-secondary border border-surface-border text-gray-300 hover:text-white'
               } disabled:opacity-50`}
-              title={testResults?.isSubmitted ? 'Proceed to next adaptive question' : 'Submit your code to continue'}
+              title={testResults?.isSubmitted ? 'Proceed to next adaptive question' : 'Evaluate and proceed to next question'}
             >
               {loadingNext || submitting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
-              <span>{testResults?.isSubmitted ? 'Next Question →' : 'Submit & Next →'}</span>
+              <span>Next Question →</span>
             </button>
           </div>
 

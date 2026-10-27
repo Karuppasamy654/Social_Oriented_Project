@@ -111,14 +111,16 @@ export default function InterviewPage() {
     }
   };
 
-  const handleNextQuestion = async () => {
+  const handleNextQuestion = async (payload = {}) => {
     if (!session) return;
     setLoadingNext(true);
 
     try {
       const res = await api.post('/interviews/question/next', {
         sessionId: session.sessionId,
-        pySessionId: session.pySessionId
+        pySessionId: session.pySessionId,
+        userCode: payload?.userCode,
+        durationSeconds: payload?.durationSeconds
       });
 
       if (res.data.completed || res.data.terminated || !res.data.nextQuestion) {
