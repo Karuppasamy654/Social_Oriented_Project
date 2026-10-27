@@ -293,7 +293,7 @@ export default function StudyRoomWorkspace() {
           return 'http://localhost:5000';
         }
 
-        return 'https://social-oriented-project.onrender.com';
+        return 'https://codebuddy-i87a.onrender.com';
       })();
 
       const newSocket = io(socketUrl, {
