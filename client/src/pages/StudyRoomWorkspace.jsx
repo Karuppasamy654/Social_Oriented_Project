@@ -56,6 +56,72 @@ const playChime = (type) => {
   } catch (e) {}
 };
 
+const ICE_SERVERS = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' }
+  ]
+};
+
+function RemotePeerTile({ peer, stream, isHandRaised, viewMode }) {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  const hasVideo = Boolean(stream && stream.getVideoTracks && stream.getVideoTracks().some(t => t.enabled));
+  const showVideo = peer.cameraOn !== false && hasVideo;
+
+  return (
+    <div className={`relative rounded-2xl overflow-hidden bg-[#181A1F] border-2 transition-all ${
+      isHandRaised ? 'border-accent-orange shadow-[0_0_15px_rgba(249,115,22,0.4)]' : 'border-[#2B2E35]'
+    } ${viewMode === 'grid' ? 'h-64' : 'h-44'}`}>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        className={`w-full h-full object-cover ${showVideo ? 'block' : 'hidden'}`}
+      />
+      {!showVideo && (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#1C1E24] to-[#121316] space-y-2 p-4">
+          <img 
+            src={peer.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250'}
+            alt={peer.username}
+            className="w-16 h-16 rounded-full object-cover border-2 border-accent-blue"
+          />
+          <span className="font-extrabold text-white text-xs truncate max-w-[120px]">{peer.displayName || peer.username}</span>
+          <span className="text-[10px] text-gray-400">{peer.role || 'Participant'}</span>
+        </div>
+      )}
+
+      {/* Peer Status Badges */}
+      <div className="absolute top-2 left-2 flex items-center space-x-1">
+        {isHandRaised && (
+          <span className="px-2 py-0.5 rounded-full bg-accent-orange text-black font-extrabold text-[10px] flex items-center gap-1 animate-bounce">
+            <Hand className="w-3 h-3" /> Hand Raised
+          </span>
+        )}
+      </div>
+
+      <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-xl text-xs text-white">
+        <span className="font-semibold text-[11px] truncate">@{peer.username}</span>
+        <div className="flex items-center space-x-1.5">
+          {peer.micOn === false ? (
+            <MicOff className="w-3.5 h-3.5 text-red-400" />
+          ) : (
+            <Mic className="w-3.5 h-3.5 text-accent-lime" />
+          )}
+          {peer.cameraOn === false && <VideoOff className="w-3.5 h-3.5 text-red-400" />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function StudyRoomWorkspace() {
   const { roomId } = useParams();
   const { user } = useAuth();
@@ -113,6 +179,10 @@ export default function StudyRoomWorkspace() {
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
   const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // WebRTC peer connections and remote streams
+  const [remoteStreams, setRemoteStreams] = useState({});
+  const peerConnectionsRef = useRef({});
 
   // Elapsed Timer
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -198,6 +268,60 @@ export default function StudyRoomWorkspace() {
   // ------------------------------------------------------------------
   // 2. Audio & Media Initialization with Speaking Detection
   // ------------------------------------------------------------------
+  const getToken = () => {
+    const rawToken = localStorage.getItem('codebuddy_token') || localStorage.getItem('token') || '';
+    return rawToken.startsWith('Bearer ') ? rawToken : (rawToken ? `Bearer ${rawToken}` : '');
+  };
+
+  const getOrCreatePeerConnection = (targetSocketId, currentSocket) => {
+    if (peerConnectionsRef.current[targetSocketId]) {
+      return peerConnectionsRef.current[targetSocketId];
+    }
+
+    const pc = new RTCPeerConnection(ICE_SERVERS);
+    peerConnectionsRef.current[targetSocketId] = pc;
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => {
+        try {
+          pc.addTrack(track, localStreamRef.current);
+        } catch (e) {}
+      });
+    }
+
+    pc.onicecandidate = (event) => {
+      const activeSock = currentSocket || socketRef.current;
+      if (event.candidate && activeSock && activeSock.connected) {
+        activeSock.emit('webrtc:ice-candidate', {
+          targetSocketId,
+          candidate: event.candidate
+        });
+      }
+    };
+
+    pc.ontrack = (event) => {
+      if (event.streams && event.streams[0]) {
+        setRemoteStreams((prev) => ({
+          ...prev,
+          [targetSocketId]: event.streams[0]
+        }));
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        setRemoteStreams((prev) => {
+          if (!prev[targetSocketId]) return prev;
+          const next = { ...prev };
+          delete next[targetSocketId];
+          return next;
+        });
+      }
+    };
+
+    return pc;
+  };
+
   const initLocalMedia = async () => {
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -207,6 +331,14 @@ export default function StudyRoomWorkspace() {
           localVideoRef.current.srcObject = stream;
         }
         setupAudioAnalyzer(stream);
+
+        Object.values(peerConnectionsRef.current).forEach((pc) => {
+          stream.getTracks().forEach((track) => {
+            try {
+              pc.addTrack(track, stream);
+            } catch (e) {}
+          });
+        });
       }
     } catch (err) {
       console.warn('Media devices warning:', err.message);
@@ -247,8 +379,8 @@ export default function StudyRoomWorkspace() {
   // 3. Socket.IO Real-Time Engine & Event Listeners
   // ------------------------------------------------------------------
   const connectSocket = (rId, isFullMember = false) => {
-    const rawToken = localStorage.getItem('token') || '';
-    const token = rawToken.startsWith('Bearer ') ? rawToken : `Bearer ${rawToken}`;
+    const token = getToken();
+    const currentUserId = user?._id || user?.id;
 
     if (!socketRef.current) {
       const socketUrl = (() => {
@@ -298,6 +430,7 @@ export default function StudyRoomWorkspace() {
 
       const newSocket = io(socketUrl, {
         auth: { token },
+        query: { token },
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionAttempts: 15,
@@ -306,10 +439,11 @@ export default function StudyRoomWorkspace() {
       socketRef.current = newSocket;
 
       const joinPayload = () => {
+        const uId = user?._id || user?.id;
         if (isFullMember) {
-          newSocket.emit('room:join', { roomId: rId, token });
+          newSocket.emit('room:join', { roomId: rId, token, userId: uId });
         } else {
-          newSocket.emit('room:subscribe', { roomId: rId, token });
+          newSocket.emit('room:subscribe', { roomId: rId, token, userId: uId });
         }
       };
 
@@ -324,11 +458,111 @@ export default function StudyRoomWorkspace() {
         if (data.activeUsers) setActiveUsers(data.activeUsers);
       });
 
-      newSocket.on('presence:update', (data) => {
-        setActiveUsers(data.activeUsers || []);
+      newSocket.on('presence:update', async (data) => {
+        const users = data.activeUsers || [];
+        setActiveUsers(users);
+
+        const myId = newSocket.id;
+        if (myId) {
+          for (const u of users) {
+            if (u.socketId && u.socketId !== myId) {
+              if (myId > u.socketId) {
+                try {
+                  const pc = getOrCreatePeerConnection(u.socketId, newSocket);
+                  const offer = await pc.createOffer();
+                  await pc.setLocalDescription(offer);
+                  newSocket.emit('webrtc:offer', {
+                    targetSocketId: u.socketId,
+                    offer
+                  });
+                } catch (err) {
+                  console.warn('WebRTC offer error:', err);
+                }
+              }
+            }
+          }
+        }
+      });
+
+      newSocket.on('webrtc:offer', async (data) => {
+        const { senderSocketId, offer } = data;
+        if (!senderSocketId || !offer) return;
+        try {
+          const pc = getOrCreatePeerConnection(senderSocketId, newSocket);
+          await pc.setRemoteDescription(new RTCSessionDescription(offer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          newSocket.emit('webrtc:answer', {
+            targetSocketId: senderSocketId,
+            answer
+          });
+        } catch (err) {
+          console.warn('WebRTC handle offer error:', err);
+        }
+      });
+
+      newSocket.on('webrtc:answer', async (data) => {
+        const { senderSocketId, answer } = data;
+        if (!senderSocketId || !answer) return;
+        try {
+          const pc = peerConnectionsRef.current[senderSocketId];
+          if (pc && pc.signalingState !== 'stable') {
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          }
+        } catch (err) {
+          console.warn('WebRTC handle answer error:', err);
+        }
+      });
+
+      newSocket.on('webrtc:ice-candidate', async (data) => {
+        const { senderSocketId, candidate } = data;
+        if (!senderSocketId || !candidate) return;
+        try {
+          const pc = peerConnectionsRef.current[senderSocketId];
+          if (pc && pc.remoteDescription) {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          }
+        } catch (err) {
+          console.warn('WebRTC candidate error:', err);
+        }
+      });
+
+      newSocket.on('media:state-change', (data) => {
+        const { socketId, userId, micOn, cameraOn } = data;
+        setActiveUsers((prev) =>
+          prev.map((u) => {
+            if ((socketId && u.socketId === socketId) || (userId && u.userId === userId)) {
+              return {
+                ...u,
+                ...(micOn !== undefined ? { micOn } : {}),
+                ...(cameraOn !== undefined ? { cameraOn } : {})
+              };
+            }
+            return u;
+          })
+        );
+      });
+
+      newSocket.on('user-left', (data) => {
+        const { socketId } = data;
+        if (socketId && peerConnectionsRef.current[socketId]) {
+          try {
+            peerConnectionsRef.current[socketId].close();
+          } catch (e) {}
+          delete peerConnectionsRef.current[socketId];
+          setRemoteStreams((prev) => {
+            const next = { ...prev };
+            delete next[socketId];
+            return next;
+          });
+        }
       });
 
       newSocket.on('editor:update', (data) => {
+        if (data.senderSocketId === newSocket.id || (data.senderId && String(data.senderId) === String(user?._id || user?.id))) {
+          setSaveStatus('Synced');
+          return;
+        }
         if (data.sharedDocument !== undefined) setSharedDocument(data.sharedDocument);
         if (data.sharedLanguage !== undefined) setSharedLanguage(data.sharedLanguage);
         setSaveStatus('Synced');
@@ -397,7 +631,7 @@ export default function StudyRoomWorkspace() {
       newSocket.on('room:hand-raise', (data) => {
         playChime('hand');
         setActiveUsers(prev => prev.map(u => {
-          if (u.userId === data.userId) {
+          if ((data.socketId && u.socketId === data.socketId) || (data.userId && u.userId === data.userId)) {
             return { ...u, isHandRaised: data.isHandRaised };
           }
           return u;
@@ -410,10 +644,11 @@ export default function StudyRoomWorkspace() {
     }
 
     if (socketRef.current && socketRef.current.connected) {
+      const uId = user?._id || user?.id;
       if (isFullMember) {
-        socketRef.current.emit('room:join', { roomId: rId, token });
+        socketRef.current.emit('room:join', { roomId: rId, token, userId: uId });
       } else {
-        socketRef.current.emit('room:subscribe', { roomId: rId, token });
+        socketRef.current.emit('room:subscribe', { roomId: rId, token, userId: uId });
       }
     }
   };
@@ -426,6 +661,11 @@ export default function StudyRoomWorkspace() {
     if (audioContextRef.current) {
       try { audioContextRef.current.close(); } catch (e) {}
     }
+    Object.values(peerConnectionsRef.current).forEach(pc => {
+      try { pc.close(); } catch (e) {}
+    });
+    peerConnectionsRef.current = {};
+    setRemoteStreams({});
     if (socketRef.current) {
       socketRef.current.emit('room:leave', { roomId });
       socketRef.current.disconnect();
@@ -482,7 +722,9 @@ export default function StudyRoomWorkspace() {
       socketRef.current.emit('editor:update', {
         roomId: room._id,
         sharedDocument: newDoc,
-        sharedLanguage
+        sharedLanguage,
+        token: getToken(),
+        userId: user?._id || user?.id
       });
     }
   };
@@ -493,7 +735,9 @@ export default function StudyRoomWorkspace() {
       socketRef.current.emit('editor:update', {
         roomId: room._id,
         sharedDocument,
-        sharedLanguage: newLang
+        sharedLanguage: newLang,
+        token: getToken(),
+        userId: user?._id || user?.id
       });
     }
   };
@@ -554,10 +798,15 @@ export default function StudyRoomWorkspace() {
     const msgText = chatInput.trim();
     setChatInput('');
 
+    const token = getToken();
+    const uid = user?._id || user?.id;
+
     if (socketRef.current && socketRef.current.connected) {
       socketRef.current.emit('chat:message', {
         roomId: room._id,
-        message: msgText
+        message: msgText,
+        token,
+        userId: uid
       });
     } else {
       try {
@@ -575,7 +824,13 @@ export default function StudyRoomWorkspace() {
       audioTracks.forEach(t => { t.enabled = !micOn; });
       setMicOn(!micOn);
       if (socketRef.current && room) {
-        socketRef.current.emit('media:state-change', { roomId: room._id, micOn: !micOn, cameraOn });
+        socketRef.current.emit('media:state-change', {
+          roomId: room._id,
+          micOn: !micOn,
+          cameraOn,
+          token: getToken(),
+          userId: user?._id || user?.id
+        });
       }
     }
   };
@@ -586,7 +841,13 @@ export default function StudyRoomWorkspace() {
       videoTracks.forEach(t => { t.enabled = !cameraOn; });
       setCameraOn(!cameraOn);
       if (socketRef.current && room) {
-        socketRef.current.emit('media:state-change', { roomId: room._id, micOn, cameraOn: !cameraOn });
+        socketRef.current.emit('media:state-change', {
+          roomId: room._id,
+          micOn,
+          cameraOn: !cameraOn,
+          token: getToken(),
+          userId: user?._id || user?.id
+        });
       }
     }
   };
@@ -983,34 +1244,17 @@ export default function StudyRoomWorkspace() {
                 </div>
 
                 {/* Remote Participants Tiles */}
-                {activeUsers.filter(u => u.userId !== (user?._id || user?.id)).map((peer) => (
-                  <div key={peer.userId} className={`relative rounded-2xl overflow-hidden bg-[#181A1F] border-2 border-[#2B2E35] flex flex-col items-center justify-center p-4 ${
-                    peer.isHandRaised ? 'border-accent-orange shadow-[0_0_15px_rgba(249,115,22,0.4)]' : ''
-                  } ${viewMode === 'grid' ? 'h-64' : 'h-44'}`}>
-                    
-                    <img 
-                      src={peer.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250'}
-                      alt={peer.username}
-                      className="w-16 h-16 rounded-full object-cover border-2 border-accent-blue mb-2"
+                {activeUsers
+                  .filter(u => u.socketId ? u.socketId !== socketRef.current?.id : String(u.userId) !== String(user?._id || user?.id))
+                  .map((peer) => (
+                    <RemotePeerTile
+                      key={peer.socketId || peer.userId}
+                      peer={peer}
+                      stream={remoteStreams[peer.socketId]}
+                      isHandRaised={peer.isHandRaised}
+                      viewMode={viewMode}
                     />
-                    <span className="font-extrabold text-white text-xs truncate max-w-[120px]">{peer.displayName || peer.username}</span>
-                    <span className="text-[10px] text-gray-400">{peer.role || 'Participant'}</span>
-
-                    {/* Peer Status Badges */}
-                    <div className="absolute top-2 left-2">
-                      {peer.isHandRaised && (
-                        <span className="px-2 py-0.5 rounded-full bg-accent-orange text-black font-extrabold text-[10px] flex items-center gap-1 animate-bounce">
-                          <Hand className="w-3 h-3" /> Hand Raised
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-xl text-xs text-white">
-                      <span className="font-semibold text-[11px] truncate">@{peer.username}</span>
-                      <Mic className="w-3.5 h-3.5 text-accent-lime" />
-                    </div>
-                  </div>
-                ))}
+                  ))}
 
               </div>
             </div>
@@ -1212,7 +1456,7 @@ export default function StudyRoomWorkspace() {
                 <div className="space-y-2">
                   <h4 className="font-bold text-gray-400 uppercase text-[10px]">In Call ({activeUsers.length})</h4>
                   {activeUsers.map(u => (
-                    <div key={u.userId} className="flex items-center justify-between p-2.5 rounded-xl bg-[#202329] border border-[#2D3139]">
+                    <div key={u.socketId || u.userId} className="flex items-center justify-between p-2.5 rounded-xl bg-[#202329] border border-[#2D3139]">
                       <div className="flex items-center space-x-2.5">
                         <img 
                           src={u.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250'} 
@@ -1224,7 +1468,10 @@ export default function StudyRoomWorkspace() {
                           <p className="text-[10px] text-gray-400">{u.role || 'Participant'}</p>
                         </div>
                       </div>
-                      <Mic className="w-4 h-4 text-accent-lime" />
+                      <div className="flex items-center space-x-1.5">
+                        {u.micOn === false ? <MicOff className="w-3.5 h-3.5 text-red-400" /> : <Mic className="w-3.5 h-3.5 text-accent-lime" />}
+                        {u.cameraOn === false && <VideoOff className="w-3.5 h-3.5 text-red-400" />}
+                      </div>
                     </div>
                   ))}
                 </div>

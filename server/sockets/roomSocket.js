@@ -120,7 +120,7 @@ function setupRoomSocket(io, socket) {
         roomPresence.set(roomId.toString(), new Map());
       }
       const roomUsers = roomPresence.get(roomId.toString());
-      roomUsers.set(userId.toString(), {
+      roomUsers.set(socket.id, {
         userId: userId.toString(),
         username: user.username,
         displayName: user.displayName || user.username,
@@ -201,6 +201,7 @@ function setupRoomSocket(io, socket) {
         sharedLanguage: room.sharedLanguage,
         docVersion: room.docVersion,
         senderId: userId.toString(),
+        senderSocketId: socket.id,
         cursor
       });
     } catch (err) {
@@ -325,10 +326,10 @@ function setupRoomSocket(io, socket) {
 
   socket.on('media:state-change', (data = {}) => {
     const { roomId, micOn, cameraOn, isScreenSharing } = data;
-    if (roomId && socket.userId) {
+    if (roomId) {
       const roomUsers = roomPresence.get(roomId.toString());
-      if (roomUsers && roomUsers.has(socket.userId)) {
-        const u = roomUsers.get(socket.userId);
+      if (roomUsers && roomUsers.has(socket.id)) {
+        const u = roomUsers.get(socket.id);
         if (micOn !== undefined) u.micOn = micOn;
         if (cameraOn !== undefined) u.cameraOn = cameraOn;
         if (isScreenSharing !== undefined) u.isScreenSharing = isScreenSharing;
@@ -362,14 +363,15 @@ function setupRoomSocket(io, socket) {
 
   socket.on('room:hand-raise', (data = {}) => {
     const { roomId, isHandRaised } = data;
-    if (roomId && socket.userId) {
+    if (roomId) {
       const roomUsers = roomPresence.get(roomId.toString());
-      if (roomUsers && roomUsers.has(socket.userId)) {
-        const u = roomUsers.get(socket.userId);
+      if (roomUsers && roomUsers.has(socket.id)) {
+        const u = roomUsers.get(socket.id);
         u.isHandRaised = Boolean(isHandRaised);
       }
       io.in(roomId.toString()).emit('room:hand-raise', {
         roomId: roomId.toString(),
+        socketId: socket.id,
         userId: socket.userId,
         username: socket.username,
         isHandRaised: Boolean(isHandRaised)
@@ -416,13 +418,13 @@ function setupRoomSocket(io, socket) {
 
 function handleUserLeave(socket, io, roomId) {
   const targetRoomId = roomId || socket.roomId;
-  if (!targetRoomId || !socket.userId) return;
+  if (!targetRoomId) return;
 
   socket.leave(targetRoomId.toString());
 
   const roomUsers = roomPresence.get(targetRoomId.toString());
   if (roomUsers) {
-    roomUsers.delete(socket.userId);
+    roomUsers.delete(socket.id);
     if (roomUsers.size === 0) {
       roomPresence.delete(targetRoomId.toString());
     } else {
