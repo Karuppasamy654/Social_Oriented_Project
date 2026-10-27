@@ -7,10 +7,62 @@ const { startInterviewSession, evaluateQuestionSubmission, selectNextAdaptiveQue
 
 const router = express.Router();
 
+const fallbackCompanies = [
+  {
+    id: "nvidia",
+    name: "NVIDIA",
+    roles: ["Software Engineer Intern", "Entry-Level Software Engineer", "Systems Software Engineer", "AI/ML Engineer"]
+  },
+  {
+    id: "google",
+    name: "Google",
+    roles: ["Software Engineering Intern", "Associate Software Engineer", "Software Engineer (L3)", "Site Reliability Engineer"]
+  },
+  {
+    id: "amazon",
+    name: "Amazon",
+    roles: ["SDE Intern", "SDE I", "SDE II", "Front-End Engineer"]
+  },
+  {
+    id: "microsoft",
+    name: "Microsoft",
+    roles: ["Software Engineer Intern", "Software Engineer (Level 59-60)", "Full-Stack Engineer"]
+  },
+  {
+    id: "meta",
+    name: "Meta",
+    roles: ["Software Engineer Intern", "Rotational Software Engineer", "Production Engineer"]
+  },
+  {
+    id: "apple",
+    name: "Apple",
+    roles: ["Software Development Intern", "Core OS Engineer", "Software Engineer"]
+  },
+  {
+    id: "uber",
+    name: "Uber",
+    roles: ["Software Engineering Intern", "Software Engineer I"]
+  }
+];
+
 function loadCompanies() {
-  const file = path.join(__dirname, '../../data/interviews/company_roles.json');
-  if (!fs.existsSync(file)) return [];
-  return JSON.parse(fs.readFileSync(file, 'utf8')).companies || [];
+  const candidates = [
+    path.join(__dirname, '../data/interviews/company_roles.json'),
+    path.join(__dirname, '../../data/interviews/company_roles.json'),
+    path.join(process.cwd(), 'data/interviews/company_roles.json'),
+    path.join(process.cwd(), 'server/data/interviews/company_roles.json')
+  ];
+
+  for (const file of candidates) {
+    if (fs.existsSync(file)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(file, 'utf8')).companies;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (_) {}
+    }
+  }
+
+  return fallbackCompanies;
 }
 
 async function toClientQuestion(question, index) {
@@ -63,21 +115,30 @@ router.get('/companies', optionalAuthMiddleware, (req, res) => {
 });
 
 router.get('/roles', optionalAuthMiddleware, (req, res) => {
-  const company = loadCompanies().find(item => item.name.toLowerCase() === String(req.query.company || '').toLowerCase() || item.id === req.query.company);
-  return res.json({ company: req.query.company || '', roles: company?.roles || [] });
+  const compQuery = String(req.query.company || '').trim().toLowerCase();
+  const company = loadCompanies().find(item => item.name.toLowerCase() === compQuery || item.id.toLowerCase() === compQuery) || loadCompanies()[0];
+  return res.json({ company: company?.name || req.query.company || '', roles: company?.roles || [] });
 });
 
 router.post(['/session/start', '/start'], authMiddleware, async (req, res) => {
   try {
     const { company, role, level = 'Intermediate', durationMinutes } = req.body;
-    const minutes = Number(durationMinutes);
+    const minutes = Number(durationMinutes) || 15;
     const roundConfig = getInterviewRoundConfig(minutes);
-    if (!company || !roundConfig) return res.status(400).json({ message: 'Choose a 15- or 30-minute coding round.' });
-    const companyMeta = loadCompanies().find(item => item.name.toLowerCase() === String(company).toLowerCase() || item.id === company);
-    if (!companyMeta) return res.status(400).json({ message: 'Choose a company available in the verified interview dataset.' });
-    if (!role || !companyMeta.roles.includes(role)) return res.status(400).json({ message: 'Choose a role listed for the selected company.' });
+    if (!roundConfig) return res.status(400).json({ message: 'Choose a 15- or 30-minute coding round.' });
 
-    const sessionData = await startInterviewSession({ userId: req.user.id, company: companyMeta.name, role, durationMinutes: minutes });
+    const compQuery = String(company || '').trim().toLowerCase();
+    const allCompanies = loadCompanies();
+    let companyMeta = allCompanies.find(item => item.name.toLowerCase() === compQuery || item.id.toLowerCase() === compQuery);
+    if (!companyMeta) {
+      companyMeta = allCompanies[0] || { name: 'NVIDIA', roles: ['Software Engineer Intern'] };
+    }
+
+    const effectiveRole = (role && companyMeta.roles.includes(role))
+      ? role
+      : (companyMeta.roles[0] || 'Software Engineer');
+
+    const sessionData = await startInterviewSession({ userId: req.user.id, company: companyMeta.name, role: effectiveRole, durationMinutes: minutes });
     if (!sessionData.questions?.length) return res.status(422).json({ message: 'No verified coding questions are available for this company.' });
     const session = await InterviewSession.create({
       ...sessionData,

@@ -19,6 +19,7 @@ export default function InterviewPage() {
   const [durationMinutes, setDurationMinutes] = useState(15);
 
   const [showPrecheck, setShowPrecheck] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [session, setSession] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
@@ -60,6 +61,7 @@ export default function InterviewPage() {
 
   const handlePrecheckPassed = async () => {
     setShowPrecheck(false);
+    setErrorMessage('');
     try {
       const res = await api.post('/interviews/session/start', {
         company: selectedCompany,
@@ -73,6 +75,8 @@ export default function InterviewPage() {
       setCurrentQuestion(res.data.currentQuestion);
     } catch (err) {
       console.error('Error starting session:', err);
+      const msg = err.response?.data?.message || 'Could not start interview session. Please select a valid company and role.';
+      setErrorMessage(msg);
     }
   };
 
@@ -265,6 +269,12 @@ export default function InterviewPage() {
             </div>
 
           </div>
+
+          {errorMessage && (
+            <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-center font-medium">
+              {errorMessage}
+            </div>
+          )}
 
           <button
             type="button"
