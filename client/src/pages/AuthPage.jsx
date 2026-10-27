@@ -182,15 +182,17 @@ export default function AuthPage({ isRegister = false }) {
           )}
 
           <div>
-            <label className="block text-xs font-medium text-gray-300 mb-1">Email Address</label>
+            <label className="block text-xs font-medium text-gray-300 mb-1">
+              {isSignUp ? 'Email Address' : 'Email or Username'}
+            </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-gray-500 absolute left-3.5 top-3" />
               <input
-                type="email"
+                type={isSignUp ? 'email' : 'text'}
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@company.com"
+                placeholder={isSignUp ? 'name@company.com' : 'name@company.com or username'}
                 className="w-full bg-surface-secondary border border-surface-border rounded-xl pl-10 pr-4 py-2.5 text-white text-xs focus:outline-none focus:border-accent-blue"
               />
             </div>

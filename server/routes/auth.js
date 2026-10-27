@@ -86,17 +86,24 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required.' });
+      return res.status(400).json({ message: 'Email (or username) and password are required.' });
     }
 
-    const user = await User.findOne({ email: String(email).trim().toLowerCase() });
+    const query = String(email).trim().toLowerCase();
+    const user = await User.findOne({
+      $or: [
+        { email: query },
+        { normalizedUsername: query },
+        { username: new RegExp(`^${query}$`, 'i') }
+      ]
+    });
     if (!user) {
-      return res.status(400).json({ message: 'Invalid credentials.' });
+      return res.status(400).json({ message: 'Invalid credentials. No account found with that email or username.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash || '');
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials.' });
+      return res.status(400).json({ message: 'Invalid credentials. Incorrect password.' });
     }
 
     const token = jwt.sign({ id: user._id, email: user.email, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
