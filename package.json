@@ -19,7 +19,7 @@
     "company:validate": "python data/scripts/validate_company_dataset.py",
     "company:import": "npm --prefix server run company:import",
     "test": "npm --prefix server test",
-    "build": "npm --prefix client install && npm --prefix client run build",
+    "build": "npm --prefix client install && npm --prefix client run build && node -e \"const fs=require('fs'); if(fs.existsSync('client/dist')){fs.cpSync('client/dist', 'public', {recursive: true});}\"",
     "dev:server": "npm --prefix server start",
     "dev:client": "npm --prefix client run dev"
   }

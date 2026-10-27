@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useAI } from '../context/AIContext';
 import { 
-  Code2, Flame, Award, Bot, User, LogOut, ChevronDown, 
-  BookOpen, Users, Swords, Video, Trophy, LayoutDashboard,
+  Code2, Flame, Award, User, LogOut, ChevronDown, 
+  BookOpen, Users, Video, Trophy, LayoutDashboard,
   Search, FileCode
 } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
-  const { toggleAIModal } = useAI();
   const navigate = useNavigate();
   const location = useLocation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -60,13 +58,6 @@ export default function Navbar() {
                 <span>Problems</span>
               </Link>
               <Link 
-                to="/compete" 
-                className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg transition-colors ${isActive('/compete') ? 'bg-surface-secondary text-accent-orange font-semibold border border-accent-orange/30' : 'text-gray-300 hover:text-white hover:bg-surface-hover'}`}
-              >
-                <Swords className="w-4 h-4 text-accent-orange" />
-                <span>Compete</span>
-              </Link>
-              <Link 
                 to="/study" 
                 className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg transition-colors ${location.pathname.startsWith('/study') ? 'bg-surface-secondary text-accent-purple font-semibold border border-accent-purple/30' : 'text-gray-300 hover:text-white hover:bg-surface-hover'}`}
               >
@@ -113,15 +104,6 @@ export default function Navbar() {
                   <Flame className="w-4 h-4 fill-accent-orange animate-bounce" />
                   <span>{user.codingStats?.currentStreak || 0} Day Streak</span>
                 </div>
-
-                {/* Ask CodeBuddy AI Button */}
-                <button
-                  onClick={toggleAIModal}
-                  className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-accent-purple to-accent-blue text-white font-medium text-xs shadow-glow-purple hover:opacity-95 transition-all transform active:scale-95"
-                >
-                  <Bot className="w-4 h-4 animate-pulse" />
-                  <span className="hidden sm:inline">Ask AI Buddy</span>
-                </button>
 
                 {/* Profile Dropdown */}
                 <div className="relative">

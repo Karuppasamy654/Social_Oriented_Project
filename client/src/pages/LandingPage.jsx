@@ -30,7 +30,7 @@ export default function LandingPage() {
 
         {/* Exactly One Short Line Tagline */}
         <p className="text-lg sm:text-2xl font-bold tracking-wide text-gray-200">
-          Learn. Solve. Improve. Compete.
+          Learn. Solve. Improve. Collaborate.
         </p>
 
         {/* Circular Bright Action Buttons */}

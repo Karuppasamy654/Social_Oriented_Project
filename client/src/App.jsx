@@ -5,7 +5,6 @@ import { AIProvider } from './context/AIContext';
 
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-import GlobalAIAssistantModal from './components/GlobalAIAssistantModal';
 
 import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
@@ -21,7 +20,6 @@ import SocialListPage from './pages/SocialListPage';
 import SubmissionDetailPage from './pages/SubmissionDetailPage';
 import StudyRoomPage from './pages/StudyRoomPage';
 import StudyRoomWorkspace from './pages/StudyRoomWorkspace';
-import CompetitionPage from './pages/CompetitionPage';
 import InterviewPage from './pages/InterviewPage';
 import CompanyDashboardPage from './pages/CompanyDashboardPage';
 import RoadmapPage from './pages/RoadmapPage';
@@ -91,7 +89,7 @@ export default function App() {
                 <Route path="/study" element={<ProtectedRoute><StudyRoomPage /></ProtectedRoute>} />
                 <Route path="/study/rooms/:roomId" element={<ProtectedRoute><StudyRoomWorkspace /></ProtectedRoute>} />
                 <Route path="/study/room/:roomId" element={<ProtectedRoute><StudyRoomWorkspace /></ProtectedRoute>} />
-                <Route path="/compete" element={<ProtectedRoute><CompetitionPage /></ProtectedRoute>} />
+                <Route path="/compete" element={<Navigate to="/problems" replace />} />
                 <Route path="/interview" element={<ProtectedRoute><InterviewPage /></ProtectedRoute>} />
                 <Route path="/company-dashboard" element={<ProtectedRoute><CompanyDashboardPage /></ProtectedRoute>} />
                 <Route path="/roadmap" element={<ProtectedRoute><RoadmapPage /></ProtectedRoute>} />
@@ -108,7 +106,6 @@ export default function App() {
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>
             </main>
-            <GlobalAIAssistantModal />
             <Footer />
           </div>
         </Router>

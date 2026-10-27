@@ -27,6 +27,7 @@ dist/
 build/
 **/build/
 .next/
+/public/
 
 # Temp / Cache / Logs
 temp_repo_inspect/
